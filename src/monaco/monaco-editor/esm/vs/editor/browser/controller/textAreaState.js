@@ -3,214 +3,220 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as strings from '../../../base/common/strings.js';
-import { Position } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
-var TextAreaState = /** @class */ (function () {
-    function TextAreaState(value, selectionStart, selectionEnd, selectionStartPosition, selectionEndPosition) {
+export const _debugComposition = false;
+export class TextAreaState {
+    static { this.EMPTY = new TextAreaState('', 0, 0, null, undefined); }
+    constructor(value, 
+    /** the offset where selection starts inside `value` */
+    selectionStart, 
+    /** the offset where selection ends inside `value` */
+    selectionEnd, 
+    /** the editor range in the view coordinate system that matches the selection inside `value` */
+    selection, 
+    /** the visible line count (wrapped, not necessarily matching \n characters) for the text in `value` before `selectionStart` */
+    newlineCountBeforeSelection) {
         this.value = value;
         this.selectionStart = selectionStart;
         this.selectionEnd = selectionEnd;
-        this.selectionStartPosition = selectionStartPosition;
-        this.selectionEndPosition = selectionEndPosition;
+        this.selection = selection;
+        this.newlineCountBeforeSelection = newlineCountBeforeSelection;
     }
-    TextAreaState.prototype.toString = function () {
-        return '[ <' + this.value + '>, selectionStart: ' + this.selectionStart + ', selectionEnd: ' + this.selectionEnd + ']';
-    };
-    TextAreaState.readFromTextArea = function (textArea) {
-        return new TextAreaState(textArea.getValue(), textArea.getSelectionStart(), textArea.getSelectionEnd(), null, null);
-    };
-    TextAreaState.prototype.collapseSelection = function () {
-        return new TextAreaState(this.value, this.value.length, this.value.length, null, null);
-    };
-    TextAreaState.prototype.writeToTextArea = function (reason, textArea, select) {
-        // console.log(Date.now() + ': writeToTextArea ' + reason + ': ' + this.toString());
+    toString() {
+        return `[ <${this.value}>, selectionStart: ${this.selectionStart}, selectionEnd: ${this.selectionEnd}]`;
+    }
+    static readFromTextArea(textArea, previousState) {
+        const value = textArea.getValue();
+        const selectionStart = textArea.getSelectionStart();
+        const selectionEnd = textArea.getSelectionEnd();
+        let newlineCountBeforeSelection = undefined;
+        if (previousState) {
+            const valueBeforeSelectionStart = value.substring(0, selectionStart);
+            const previousValueBeforeSelectionStart = previousState.value.substring(0, previousState.selectionStart);
+            if (valueBeforeSelectionStart === previousValueBeforeSelectionStart) {
+                newlineCountBeforeSelection = previousState.newlineCountBeforeSelection;
+            }
+        }
+        return new TextAreaState(value, selectionStart, selectionEnd, null, newlineCountBeforeSelection);
+    }
+    collapseSelection() {
+        if (this.selectionStart === this.value.length) {
+            return this;
+        }
+        return new TextAreaState(this.value, this.value.length, this.value.length, null, undefined);
+    }
+    writeToTextArea(reason, textArea, select) {
+        if (_debugComposition) {
+            console.log(`writeToTextArea ${reason}: ${this.toString()}`);
+        }
         textArea.setValue(reason, this.value);
         if (select) {
             textArea.setSelectionRange(reason, this.selectionStart, this.selectionEnd);
         }
-    };
-    TextAreaState.prototype.deduceEditorPosition = function (offset) {
+    }
+    deduceEditorPosition(offset) {
         if (offset <= this.selectionStart) {
-            var str = this.value.substring(offset, this.selectionStart);
-            return this._finishDeduceEditorPosition(this.selectionStartPosition, str, -1);
+            const str = this.value.substring(offset, this.selectionStart);
+            return this._finishDeduceEditorPosition(this.selection?.getStartPosition() ?? null, str, -1);
         }
         if (offset >= this.selectionEnd) {
-            var str = this.value.substring(this.selectionEnd, offset);
-            return this._finishDeduceEditorPosition(this.selectionEndPosition, str, 1);
+            const str = this.value.substring(this.selectionEnd, offset);
+            return this._finishDeduceEditorPosition(this.selection?.getEndPosition() ?? null, str, 1);
         }
-        var str1 = this.value.substring(this.selectionStart, offset);
+        const str1 = this.value.substring(this.selectionStart, offset);
         if (str1.indexOf(String.fromCharCode(8230)) === -1) {
-            return this._finishDeduceEditorPosition(this.selectionStartPosition, str1, 1);
+            return this._finishDeduceEditorPosition(this.selection?.getStartPosition() ?? null, str1, 1);
         }
-        var str2 = this.value.substring(offset, this.selectionEnd);
-        return this._finishDeduceEditorPosition(this.selectionEndPosition, str2, -1);
-    };
-    TextAreaState.prototype._finishDeduceEditorPosition = function (anchor, deltaText, signum) {
-        var lineFeedCnt = 0;
-        var lastLineFeedIndex = -1;
+        const str2 = this.value.substring(offset, this.selectionEnd);
+        return this._finishDeduceEditorPosition(this.selection?.getEndPosition() ?? null, str2, -1);
+    }
+    _finishDeduceEditorPosition(anchor, deltaText, signum) {
+        let lineFeedCnt = 0;
+        let lastLineFeedIndex = -1;
         while ((lastLineFeedIndex = deltaText.indexOf('\n', lastLineFeedIndex + 1)) !== -1) {
             lineFeedCnt++;
         }
         return [anchor, signum * deltaText.length, lineFeedCnt];
-    };
-    TextAreaState.selectedText = function (text) {
-        return new TextAreaState(text, 0, text.length, null, null);
-    };
-    TextAreaState.deduceInput = function (previousState, currentState, couldBeEmojiInput) {
+    }
+    static deduceInput(previousState, currentState, couldBeEmojiInput) {
         if (!previousState) {
             // This is the EMPTY state
             return {
                 text: '',
-                replaceCharCnt: 0
+                replacePrevCharCnt: 0,
+                replaceNextCharCnt: 0,
+                positionDelta: 0
             };
         }
-        // console.log('------------------------deduceInput');
-        // console.log('PREVIOUS STATE: ' + previousState.toString());
-        // console.log('CURRENT STATE: ' + currentState.toString());
-        var previousValue = previousState.value;
-        var previousSelectionStart = previousState.selectionStart;
-        var previousSelectionEnd = previousState.selectionEnd;
-        var currentValue = currentState.value;
-        var currentSelectionStart = currentState.selectionStart;
-        var currentSelectionEnd = currentState.selectionEnd;
-        // Strip the previous suffix from the value (without interfering with the current selection)
-        var previousSuffix = previousValue.substring(previousSelectionEnd);
-        var currentSuffix = currentValue.substring(currentSelectionEnd);
-        var suffixLength = strings.commonSuffixLength(previousSuffix, currentSuffix);
-        currentValue = currentValue.substring(0, currentValue.length - suffixLength);
-        previousValue = previousValue.substring(0, previousValue.length - suffixLength);
-        var previousPrefix = previousValue.substring(0, previousSelectionStart);
-        var currentPrefix = currentValue.substring(0, currentSelectionStart);
-        var prefixLength = strings.commonPrefixLength(previousPrefix, currentPrefix);
-        currentValue = currentValue.substring(prefixLength);
-        previousValue = previousValue.substring(prefixLength);
-        currentSelectionStart -= prefixLength;
-        previousSelectionStart -= prefixLength;
-        currentSelectionEnd -= prefixLength;
-        previousSelectionEnd -= prefixLength;
-        // console.log('AFTER DIFFING PREVIOUS STATE: <' + previousValue + '>, selectionStart: ' + previousSelectionStart + ', selectionEnd: ' + previousSelectionEnd);
-        // console.log('AFTER DIFFING CURRENT STATE: <' + currentValue + '>, selectionStart: ' + currentSelectionStart + ', selectionEnd: ' + currentSelectionEnd);
-        if (couldBeEmojiInput && currentSelectionStart === currentSelectionEnd && previousValue.length > 0) {
-            // on OSX, emojis from the emoji picker are inserted at random locations
-            // the only hints we can use is that the selection is immediately after the inserted emoji
-            // and that none of the old text has been deleted
-            var potentialEmojiInput = null;
-            if (currentSelectionStart === currentValue.length) {
-                // emoji potentially inserted "somewhere" after the previous selection => it should appear at the end of `currentValue`
-                if (strings.startsWith(currentValue, previousValue)) {
-                    // only if all of the old text is accounted for
-                    potentialEmojiInput = currentValue.substring(previousValue.length);
-                }
-            }
-            else {
-                // emoji potentially inserted "somewhere" before the previous selection => it should appear at the start of `currentValue`
-                if (strings.endsWith(currentValue, previousValue)) {
-                    // only if all of the old text is accounted for
-                    potentialEmojiInput = currentValue.substring(0, currentValue.length - previousValue.length);
-                }
-            }
-            if (potentialEmojiInput !== null && potentialEmojiInput.length > 0) {
-                // now we check that this is indeed an emoji
-                // emojis can grow quite long, so a length check is of no help
-                // e.g. 1F3F4 E0067 E0062 E0065 E006E E0067 E007F  ; fully-qualified     # 🏴󠁧󠁢󠁥󠁮󠁧󠁿 England
-                // Oftentimes, emojis use Variation Selector-16 (U+FE0F), so that is a good hint
-                // http://emojipedia.org/variation-selector-16/
-                // > An invisible codepoint which specifies that the preceding character
-                // > should be displayed with emoji presentation. Only required if the
-                // > preceding character defaults to text presentation.
-                if (/\uFE0F/.test(potentialEmojiInput) || strings.containsEmoji(potentialEmojiInput)) {
-                    return {
-                        text: potentialEmojiInput,
-                        replaceCharCnt: 0
-                    };
-                }
-            }
+        if (_debugComposition) {
+            console.log('------------------------deduceInput');
+            console.log(`PREVIOUS STATE: ${previousState.toString()}`);
+            console.log(`CURRENT STATE: ${currentState.toString()}`);
+        }
+        const prefixLength = Math.min(strings.commonPrefixLength(previousState.value, currentState.value), previousState.selectionStart, currentState.selectionStart);
+        const suffixLength = Math.min(strings.commonSuffixLength(previousState.value, currentState.value), previousState.value.length - previousState.selectionEnd, currentState.value.length - currentState.selectionEnd);
+        const previousValue = previousState.value.substring(prefixLength, previousState.value.length - suffixLength);
+        const currentValue = currentState.value.substring(prefixLength, currentState.value.length - suffixLength);
+        const previousSelectionStart = previousState.selectionStart - prefixLength;
+        const previousSelectionEnd = previousState.selectionEnd - prefixLength;
+        const currentSelectionStart = currentState.selectionStart - prefixLength;
+        const currentSelectionEnd = currentState.selectionEnd - prefixLength;
+        if (_debugComposition) {
+            console.log(`AFTER DIFFING PREVIOUS STATE: <${previousValue}>, selectionStart: ${previousSelectionStart}, selectionEnd: ${previousSelectionEnd}`);
+            console.log(`AFTER DIFFING CURRENT STATE: <${currentValue}>, selectionStart: ${currentSelectionStart}, selectionEnd: ${currentSelectionEnd}`);
         }
         if (currentSelectionStart === currentSelectionEnd) {
-            // composition accept case (noticed in FF + Japanese)
-            // [blahblah] => blahblah|
-            if (previousValue === currentValue
-                && previousSelectionStart === 0
-                && previousSelectionEnd === previousValue.length
-                && currentSelectionStart === currentValue.length
-                && currentValue.indexOf('\n') === -1) {
-                if (strings.containsFullWidthCharacter(currentValue)) {
-                    return {
-                        text: '',
-                        replaceCharCnt: 0
-                    };
-                }
-            }
             // no current selection
-            var replacePreviousCharacters_1 = (previousPrefix.length - prefixLength);
-            // console.log('REMOVE PREVIOUS: ' + (previousPrefix.length - prefixLength) + ' chars');
+            const replacePreviousCharacters = (previousState.selectionStart - prefixLength);
+            if (_debugComposition) {
+                console.log(`REMOVE PREVIOUS: ${replacePreviousCharacters} chars`);
+            }
             return {
                 text: currentValue,
-                replaceCharCnt: replacePreviousCharacters_1
+                replacePrevCharCnt: replacePreviousCharacters,
+                replaceNextCharCnt: 0,
+                positionDelta: 0
             };
         }
         // there is a current selection => composition case
-        var replacePreviousCharacters = previousSelectionEnd - previousSelectionStart;
+        const replacePreviousCharacters = previousSelectionEnd - previousSelectionStart;
         return {
             text: currentValue,
-            replaceCharCnt: replacePreviousCharacters
+            replacePrevCharCnt: replacePreviousCharacters,
+            replaceNextCharCnt: 0,
+            positionDelta: 0
         };
-    };
-    TextAreaState.EMPTY = new TextAreaState('', 0, 0, null, null);
-    return TextAreaState;
-}());
-export { TextAreaState };
-var PagedScreenReaderStrategy = /** @class */ (function () {
-    function PagedScreenReaderStrategy() {
     }
-    PagedScreenReaderStrategy._getPageOfLine = function (lineNumber, linesPerPage) {
+    static deduceAndroidCompositionInput(previousState, currentState) {
+        if (!previousState) {
+            // This is the EMPTY state
+            return {
+                text: '',
+                replacePrevCharCnt: 0,
+                replaceNextCharCnt: 0,
+                positionDelta: 0
+            };
+        }
+        if (_debugComposition) {
+            console.log('------------------------deduceAndroidCompositionInput');
+            console.log(`PREVIOUS STATE: ${previousState.toString()}`);
+            console.log(`CURRENT STATE: ${currentState.toString()}`);
+        }
+        if (previousState.value === currentState.value) {
+            return {
+                text: '',
+                replacePrevCharCnt: 0,
+                replaceNextCharCnt: 0,
+                positionDelta: currentState.selectionEnd - previousState.selectionEnd
+            };
+        }
+        const prefixLength = Math.min(strings.commonPrefixLength(previousState.value, currentState.value), previousState.selectionEnd);
+        const suffixLength = Math.min(strings.commonSuffixLength(previousState.value, currentState.value), previousState.value.length - previousState.selectionEnd);
+        const previousValue = previousState.value.substring(prefixLength, previousState.value.length - suffixLength);
+        const currentValue = currentState.value.substring(prefixLength, currentState.value.length - suffixLength);
+        const previousSelectionStart = previousState.selectionStart - prefixLength;
+        const previousSelectionEnd = previousState.selectionEnd - prefixLength;
+        const currentSelectionStart = currentState.selectionStart - prefixLength;
+        const currentSelectionEnd = currentState.selectionEnd - prefixLength;
+        if (_debugComposition) {
+            console.log(`AFTER DIFFING PREVIOUS STATE: <${previousValue}>, selectionStart: ${previousSelectionStart}, selectionEnd: ${previousSelectionEnd}`);
+            console.log(`AFTER DIFFING CURRENT STATE: <${currentValue}>, selectionStart: ${currentSelectionStart}, selectionEnd: ${currentSelectionEnd}`);
+        }
+        return {
+            text: currentValue,
+            replacePrevCharCnt: previousSelectionEnd,
+            replaceNextCharCnt: previousValue.length - previousSelectionEnd,
+            positionDelta: currentSelectionEnd - currentValue.length
+        };
+    }
+}
+export class PagedScreenReaderStrategy {
+    static _getPageOfLine(lineNumber, linesPerPage) {
         return Math.floor((lineNumber - 1) / linesPerPage);
-    };
-    PagedScreenReaderStrategy._getRangeForPage = function (page, linesPerPage) {
-        var offset = page * linesPerPage;
-        var startLineNumber = offset + 1;
-        var endLineNumber = offset + linesPerPage;
+    }
+    static _getRangeForPage(page, linesPerPage) {
+        const offset = page * linesPerPage;
+        const startLineNumber = offset + 1;
+        const endLineNumber = offset + linesPerPage;
         return new Range(startLineNumber, 1, endLineNumber + 1, 1);
-    };
-    PagedScreenReaderStrategy.fromEditorSelection = function (previousState, model, selection, linesPerPage, trimLongText) {
-        var selectionStartPage = PagedScreenReaderStrategy._getPageOfLine(selection.startLineNumber, linesPerPage);
-        var selectionStartPageRange = PagedScreenReaderStrategy._getRangeForPage(selectionStartPage, linesPerPage);
-        var selectionEndPage = PagedScreenReaderStrategy._getPageOfLine(selection.endLineNumber, linesPerPage);
-        var selectionEndPageRange = PagedScreenReaderStrategy._getRangeForPage(selectionEndPage, linesPerPage);
-        var pretextRange = selectionStartPageRange.intersectRanges(new Range(1, 1, selection.startLineNumber, selection.startColumn));
-        var pretext = model.getValueInRange(pretextRange, 1 /* LF */);
-        var lastLine = model.getLineCount();
-        var lastLineMaxColumn = model.getLineMaxColumn(lastLine);
-        var posttextRange = selectionEndPageRange.intersectRanges(new Range(selection.endLineNumber, selection.endColumn, lastLine, lastLineMaxColumn));
-        var posttext = model.getValueInRange(posttextRange, 1 /* LF */);
-        var text;
-        if (selectionStartPage === selectionEndPage || selectionStartPage + 1 === selectionEndPage) {
-            // take full selection
-            text = model.getValueInRange(selection, 1 /* LF */);
-        }
-        else {
-            var selectionRange1 = selectionStartPageRange.intersectRanges(selection);
-            var selectionRange2 = selectionEndPageRange.intersectRanges(selection);
-            text = (model.getValueInRange(selectionRange1, 1 /* LF */)
-                + String.fromCharCode(8230)
-                + model.getValueInRange(selectionRange2, 1 /* LF */));
-        }
+    }
+    static fromEditorSelection(model, selection, linesPerPage, trimLongText) {
         // Chromium handles very poorly text even of a few thousand chars
         // Cut text to avoid stalling the entire UI
-        if (trimLongText) {
-            var LIMIT_CHARS = 500;
-            if (pretext.length > LIMIT_CHARS) {
-                pretext = pretext.substring(pretext.length - LIMIT_CHARS, pretext.length);
-            }
-            if (posttext.length > LIMIT_CHARS) {
-                posttext = posttext.substring(0, LIMIT_CHARS);
-            }
-            if (text.length > 2 * LIMIT_CHARS) {
-                text = text.substring(0, LIMIT_CHARS) + String.fromCharCode(8230) + text.substring(text.length - LIMIT_CHARS, text.length);
-            }
+        const LIMIT_CHARS = 500;
+        const selectionStartPage = PagedScreenReaderStrategy._getPageOfLine(selection.startLineNumber, linesPerPage);
+        const selectionStartPageRange = PagedScreenReaderStrategy._getRangeForPage(selectionStartPage, linesPerPage);
+        const selectionEndPage = PagedScreenReaderStrategy._getPageOfLine(selection.endLineNumber, linesPerPage);
+        const selectionEndPageRange = PagedScreenReaderStrategy._getRangeForPage(selectionEndPage, linesPerPage);
+        let pretextRange = selectionStartPageRange.intersectRanges(new Range(1, 1, selection.startLineNumber, selection.startColumn));
+        if (trimLongText && model.getValueLengthInRange(pretextRange, 1 /* EndOfLinePreference.LF */) > LIMIT_CHARS) {
+            const pretextStart = model.modifyPosition(pretextRange.getEndPosition(), -LIMIT_CHARS);
+            pretextRange = Range.fromPositions(pretextStart, pretextRange.getEndPosition());
         }
-        return new TextAreaState(pretext + text + posttext, pretext.length, pretext.length + text.length, new Position(selection.startLineNumber, selection.startColumn), new Position(selection.endLineNumber, selection.endColumn));
-    };
-    return PagedScreenReaderStrategy;
-}());
-export { PagedScreenReaderStrategy };
+        const pretext = model.getValueInRange(pretextRange, 1 /* EndOfLinePreference.LF */);
+        const lastLine = model.getLineCount();
+        const lastLineMaxColumn = model.getLineMaxColumn(lastLine);
+        let posttextRange = selectionEndPageRange.intersectRanges(new Range(selection.endLineNumber, selection.endColumn, lastLine, lastLineMaxColumn));
+        if (trimLongText && model.getValueLengthInRange(posttextRange, 1 /* EndOfLinePreference.LF */) > LIMIT_CHARS) {
+            const posttextEnd = model.modifyPosition(posttextRange.getStartPosition(), LIMIT_CHARS);
+            posttextRange = Range.fromPositions(posttextRange.getStartPosition(), posttextEnd);
+        }
+        const posttext = model.getValueInRange(posttextRange, 1 /* EndOfLinePreference.LF */);
+        let text;
+        if (selectionStartPage === selectionEndPage || selectionStartPage + 1 === selectionEndPage) {
+            // take full selection
+            text = model.getValueInRange(selection, 1 /* EndOfLinePreference.LF */);
+        }
+        else {
+            const selectionRange1 = selectionStartPageRange.intersectRanges(selection);
+            const selectionRange2 = selectionEndPageRange.intersectRanges(selection);
+            text = (model.getValueInRange(selectionRange1, 1 /* EndOfLinePreference.LF */)
+                + String.fromCharCode(8230)
+                + model.getValueInRange(selectionRange2, 1 /* EndOfLinePreference.LF */));
+        }
+        if (trimLongText && text.length > 2 * LIMIT_CHARS) {
+            text = text.substring(0, LIMIT_CHARS) + String.fromCharCode(8230) + text.substring(text.length - LIMIT_CHARS, text.length);
+        }
+        return new TextAreaState(pretext + text + posttext, pretext.length, pretext.length + text.length, selection, pretextRange.endLineNumber - pretextRange.startLineNumber);
+    }
+}

@@ -14,3 +14,37 @@ export function isCodeEditor(thing) {
         return false;
     }
 }
+/**
+ *@internal
+ */
+export function isDiffEditor(thing) {
+    if (thing && typeof thing.getEditorType === 'function') {
+        return thing.getEditorType() === editorCommon.EditorType.IDiffEditor;
+    }
+    else {
+        return false;
+    }
+}
+/**
+ *@internal
+ */
+export function isCompositeEditor(thing) {
+    return !!thing
+        && typeof thing === 'object'
+        && typeof thing.onDidChangeActiveEditor === 'function';
+}
+/**
+ *@internal
+ */
+export function getCodeEditor(thing) {
+    if (isCodeEditor(thing)) {
+        return thing;
+    }
+    if (isDiffEditor(thing)) {
+        return thing.getModifiedEditor();
+    }
+    if (isCompositeEditor(thing) && isCodeEditor(thing.activeCodeEditor)) {
+        return thing.activeCodeEditor;
+    }
+    return null;
+}

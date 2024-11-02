@@ -2,323 +2,143 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-export function values(forEachable) {
-    var result = [];
-    forEachable.forEach(function (value) { return result.push(value); });
-    return result;
-}
-export function keys(map) {
-    var result = [];
-    map.forEach(function (_value, key) { return result.push(key); });
-    return result;
-}
-var StringIterator = /** @class */ (function () {
-    function StringIterator() {
-        this._value = '';
-        this._pos = 0;
+var _a, _b;
+class ResourceMapEntry {
+    constructor(uri, value) {
+        this.uri = uri;
+        this.value = value;
     }
-    StringIterator.prototype.reset = function (key) {
-        this._value = key;
-        this._pos = 0;
-        return this;
-    };
-    StringIterator.prototype.next = function () {
-        this._pos += 1;
-        return this;
-    };
-    StringIterator.prototype.hasNext = function () {
-        return this._pos < this._value.length - 1;
-    };
-    StringIterator.prototype.cmp = function (a) {
-        var aCode = a.charCodeAt(0);
-        var thisCode = this._value.charCodeAt(this._pos);
-        return aCode - thisCode;
-    };
-    StringIterator.prototype.value = function () {
-        return this._value[this._pos];
-    };
-    return StringIterator;
-}());
-export { StringIterator };
-var PathIterator = /** @class */ (function () {
-    function PathIterator(_splitOnBackslash) {
-        if (_splitOnBackslash === void 0) { _splitOnBackslash = true; }
-        this._splitOnBackslash = _splitOnBackslash;
-    }
-    PathIterator.prototype.reset = function (key) {
-        this._value = key.replace(/\\$|\/$/, '');
-        this._from = 0;
-        this._to = 0;
-        return this.next();
-    };
-    PathIterator.prototype.hasNext = function () {
-        return this._to < this._value.length;
-    };
-    PathIterator.prototype.next = function () {
-        // this._data = key.split(/[\\/]/).filter(s => !!s);
-        this._from = this._to;
-        var justSeps = true;
-        for (; this._to < this._value.length; this._to++) {
-            var ch = this._value.charCodeAt(this._to);
-            if (ch === 47 /* Slash */ || this._splitOnBackslash && ch === 92 /* Backslash */) {
-                if (justSeps) {
-                    this._from++;
-                }
-                else {
-                    break;
-                }
-            }
-            else {
-                justSeps = false;
-            }
+}
+function isEntries(arg) {
+    return Array.isArray(arg);
+}
+export class ResourceMap {
+    static { this.defaultToKey = (resource) => resource.toString(); }
+    constructor(arg, toKey) {
+        this[_a] = 'ResourceMap';
+        if (arg instanceof ResourceMap) {
+            this.map = new Map(arg.map);
+            this.toKey = toKey ?? ResourceMap.defaultToKey;
         }
-        return this;
-    };
-    PathIterator.prototype.cmp = function (a) {
-        var aPos = 0;
-        var aLen = a.length;
-        var thisPos = this._from;
-        while (aPos < aLen && thisPos < this._to) {
-            var cmp = a.charCodeAt(aPos) - this._value.charCodeAt(thisPos);
-            if (cmp !== 0) {
-                return cmp;
+        else if (isEntries(arg)) {
+            this.map = new Map();
+            this.toKey = toKey ?? ResourceMap.defaultToKey;
+            for (const [resource, value] of arg) {
+                this.set(resource, value);
             }
-            aPos += 1;
-            thisPos += 1;
-        }
-        if (aLen === this._to - this._from) {
-            return 0;
-        }
-        else if (aPos < aLen) {
-            return -1;
         }
         else {
-            return 1;
+            this.map = new Map();
+            this.toKey = arg ?? ResourceMap.defaultToKey;
         }
-    };
-    PathIterator.prototype.value = function () {
-        return this._value.substring(this._from, this._to);
-    };
-    return PathIterator;
-}());
-export { PathIterator };
-var TernarySearchTreeNode = /** @class */ (function () {
-    function TernarySearchTreeNode() {
     }
-    return TernarySearchTreeNode;
-}());
-var TernarySearchTree = /** @class */ (function () {
-    function TernarySearchTree(segments) {
-        this._iter = segments;
+    set(resource, value) {
+        this.map.set(this.toKey(resource), new ResourceMapEntry(resource, value));
+        return this;
     }
-    TernarySearchTree.forPaths = function () {
-        return new TernarySearchTree(new PathIterator());
-    };
-    TernarySearchTree.forStrings = function () {
-        return new TernarySearchTree(new StringIterator());
-    };
-    TernarySearchTree.prototype.clear = function () {
-        this._root = undefined;
-    };
-    TernarySearchTree.prototype.set = function (key, element) {
-        var iter = this._iter.reset(key);
-        var node;
-        if (!this._root) {
-            this._root = new TernarySearchTreeNode();
-            this._root.segment = iter.value();
-        }
-        node = this._root;
-        while (true) {
-            var val = iter.cmp(node.segment);
-            if (val > 0) {
-                // left
-                if (!node.left) {
-                    node.left = new TernarySearchTreeNode();
-                    node.left.segment = iter.value();
-                }
-                node = node.left;
-            }
-            else if (val < 0) {
-                // right
-                if (!node.right) {
-                    node.right = new TernarySearchTreeNode();
-                    node.right.segment = iter.value();
-                }
-                node = node.right;
-            }
-            else if (iter.hasNext()) {
-                // mid
-                iter.next();
-                if (!node.mid) {
-                    node.mid = new TernarySearchTreeNode();
-                    node.mid.segment = iter.value();
-                }
-                node = node.mid;
-            }
-            else {
-                break;
-            }
-        }
-        var oldElement = node.value;
-        node.value = element;
-        node.key = key;
-        return oldElement;
-    };
-    TernarySearchTree.prototype.get = function (key) {
-        var iter = this._iter.reset(key);
-        var node = this._root;
-        while (node) {
-            var val = iter.cmp(node.segment);
-            if (val > 0) {
-                // left
-                node = node.left;
-            }
-            else if (val < 0) {
-                // right
-                node = node.right;
-            }
-            else if (iter.hasNext()) {
-                // mid
-                iter.next();
-                node = node.mid;
-            }
-            else {
-                break;
-            }
-        }
-        return node ? node.value : undefined;
-    };
-    TernarySearchTree.prototype.findSubstr = function (key) {
-        var iter = this._iter.reset(key);
-        var node = this._root;
-        var candidate = undefined;
-        while (node) {
-            var val = iter.cmp(node.segment);
-            if (val > 0) {
-                // left
-                node = node.left;
-            }
-            else if (val < 0) {
-                // right
-                node = node.right;
-            }
-            else if (iter.hasNext()) {
-                // mid
-                iter.next();
-                candidate = node.value || candidate;
-                node = node.mid;
-            }
-            else {
-                break;
-            }
-        }
-        return node && node.value || candidate;
-    };
-    TernarySearchTree.prototype.forEach = function (callback) {
-        this._forEach(this._root, callback);
-    };
-    TernarySearchTree.prototype._forEach = function (node, callback) {
-        if (node) {
-            // left
-            this._forEach(node.left, callback);
-            // node
-            if (node.value) {
-                // callback(node.value, this._iter.join(parts));
-                callback(node.value, node.key);
-            }
-            // mid
-            this._forEach(node.mid, callback);
-            // right
-            this._forEach(node.right, callback);
-        }
-    };
-    return TernarySearchTree;
-}());
-export { TernarySearchTree };
-var ResourceMap = /** @class */ (function () {
-    function ResourceMap() {
-        this.map = new Map();
-        this.ignoreCase = false; // in the future this should be an uri-comparator
+    get(resource) {
+        return this.map.get(this.toKey(resource))?.value;
     }
-    ResourceMap.prototype.set = function (resource, value) {
-        this.map.set(this.toKey(resource), value);
-    };
-    ResourceMap.prototype.get = function (resource) {
-        return this.map.get(this.toKey(resource));
-    };
-    ResourceMap.prototype.toKey = function (resource) {
-        var key = resource.toString();
-        if (this.ignoreCase) {
-            key = key.toLowerCase();
+    has(resource) {
+        return this.map.has(this.toKey(resource));
+    }
+    get size() {
+        return this.map.size;
+    }
+    clear() {
+        this.map.clear();
+    }
+    delete(resource) {
+        return this.map.delete(this.toKey(resource));
+    }
+    forEach(clb, thisArg) {
+        if (typeof thisArg !== 'undefined') {
+            clb = clb.bind(thisArg);
         }
-        return key;
-    };
-    return ResourceMap;
-}());
-export { ResourceMap };
-var LinkedMap = /** @class */ (function () {
-    function LinkedMap() {
+        for (const [_, entry] of this.map) {
+            clb(entry.value, entry.uri, this);
+        }
+    }
+    *values() {
+        for (const entry of this.map.values()) {
+            yield entry.value;
+        }
+    }
+    *keys() {
+        for (const entry of this.map.values()) {
+            yield entry.uri;
+        }
+    }
+    *entries() {
+        for (const entry of this.map.values()) {
+            yield [entry.uri, entry.value];
+        }
+    }
+    *[(_a = Symbol.toStringTag, Symbol.iterator)]() {
+        for (const [, entry] of this.map) {
+            yield [entry.uri, entry.value];
+        }
+    }
+}
+export class LinkedMap {
+    constructor() {
+        this[_b] = 'LinkedMap';
         this._map = new Map();
         this._head = undefined;
         this._tail = undefined;
         this._size = 0;
+        this._state = 0;
     }
-    LinkedMap.prototype.clear = function () {
+    clear() {
         this._map.clear();
         this._head = undefined;
         this._tail = undefined;
         this._size = 0;
-    };
-    Object.defineProperty(LinkedMap.prototype, "size", {
-        get: function () {
-            return this._size;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    LinkedMap.prototype.get = function (key, touch) {
-        if (touch === void 0) { touch = 0 /* None */; }
-        var item = this._map.get(key);
+        this._state++;
+    }
+    isEmpty() {
+        return !this._head && !this._tail;
+    }
+    get size() {
+        return this._size;
+    }
+    get first() {
+        return this._head?.value;
+    }
+    get last() {
+        return this._tail?.value;
+    }
+    has(key) {
+        return this._map.has(key);
+    }
+    get(key, touch = 0 /* Touch.None */) {
+        const item = this._map.get(key);
         if (!item) {
             return undefined;
         }
-        if (touch !== 0 /* None */) {
+        if (touch !== 0 /* Touch.None */) {
             this.touch(item, touch);
         }
         return item.value;
-    };
-    LinkedMap.prototype.set = function (key, value, touch) {
-        if (touch === void 0) { touch = 0 /* None */; }
-        var item = this._map.get(key);
+    }
+    set(key, value, touch = 0 /* Touch.None */) {
+        let item = this._map.get(key);
         if (item) {
             item.value = value;
-            if (touch !== 0 /* None */) {
+            if (touch !== 0 /* Touch.None */) {
                 this.touch(item, touch);
             }
         }
         else {
-            item = { key: key, value: value, next: undefined, previous: undefined };
+            item = { key, value, next: undefined, previous: undefined };
             switch (touch) {
-                case 0 /* None */:
+                case 0 /* Touch.None */:
                     this.addItemLast(item);
                     break;
-                case 1 /* AsOld */:
+                case 1 /* Touch.AsOld */:
                     this.addItemFirst(item);
                     break;
-                case 2 /* AsNew */:
+                case 2 /* Touch.AsNew */:
                     this.addItemLast(item);
                     break;
                 default:
@@ -328,12 +148,13 @@ var LinkedMap = /** @class */ (function () {
             this._map.set(key, item);
             this._size++;
         }
-    };
-    LinkedMap.prototype.delete = function (key) {
+        return this;
+    }
+    delete(key) {
         return !!this.remove(key);
-    };
-    LinkedMap.prototype.remove = function (key) {
-        var item = this._map.get(key);
+    }
+    remove(key) {
+        const item = this._map.get(key);
         if (!item) {
             return undefined;
         }
@@ -341,9 +162,23 @@ var LinkedMap = /** @class */ (function () {
         this.removeItem(item);
         this._size--;
         return item.value;
-    };
-    LinkedMap.prototype.forEach = function (callbackfn, thisArg) {
-        var current = this._head;
+    }
+    shift() {
+        if (!this._head && !this._tail) {
+            return undefined;
+        }
+        if (!this._head || !this._tail) {
+            throw new Error('Invalid list');
+        }
+        const item = this._head;
+        this._map.delete(item.key);
+        this.removeItem(item);
+        this._size--;
+        return item.value;
+    }
+    forEach(callbackfn, thisArg) {
+        const state = this._state;
+        let current = this._head;
         while (current) {
             if (thisArg) {
                 callbackfn.bind(thisArg)(current.value, current.key, this);
@@ -351,49 +186,88 @@ var LinkedMap = /** @class */ (function () {
             else {
                 callbackfn(current.value, current.key, this);
             }
+            if (this._state !== state) {
+                throw new Error(`LinkedMap got modified during iteration.`);
+            }
             current = current.next;
         }
-    };
-    /* VS Code / Monaco editor runs on es5 which has no Symbol.iterator
-    keys(): IterableIterator<K> {
-        const current = this._head;
-        const iterator: IterableIterator<K> = {
+    }
+    keys() {
+        const map = this;
+        const state = this._state;
+        let current = this._head;
+        const iterator = {
             [Symbol.iterator]() {
                 return iterator;
             },
-            next():IteratorResult<K> {
+            next() {
+                if (map._state !== state) {
+                    throw new Error(`LinkedMap got modified during iteration.`);
+                }
                 if (current) {
                     const result = { value: current.key, done: false };
                     current = current.next;
                     return result;
-                } else {
+                }
+                else {
                     return { value: undefined, done: true };
                 }
             }
         };
         return iterator;
     }
-
-    values(): IterableIterator<V> {
-        const current = this._head;
-        const iterator: IterableIterator<V> = {
+    values() {
+        const map = this;
+        const state = this._state;
+        let current = this._head;
+        const iterator = {
             [Symbol.iterator]() {
                 return iterator;
             },
-            next():IteratorResult<V> {
+            next() {
+                if (map._state !== state) {
+                    throw new Error(`LinkedMap got modified during iteration.`);
+                }
                 if (current) {
                     const result = { value: current.value, done: false };
                     current = current.next;
                     return result;
-                } else {
+                }
+                else {
                     return { value: undefined, done: true };
                 }
             }
         };
         return iterator;
     }
-    */
-    LinkedMap.prototype.trimOld = function (newSize) {
+    entries() {
+        const map = this;
+        const state = this._state;
+        let current = this._head;
+        const iterator = {
+            [Symbol.iterator]() {
+                return iterator;
+            },
+            next() {
+                if (map._state !== state) {
+                    throw new Error(`LinkedMap got modified during iteration.`);
+                }
+                if (current) {
+                    const result = { value: [current.key, current.value], done: false };
+                    current = current.next;
+                    return result;
+                }
+                else {
+                    return { value: undefined, done: true };
+                }
+            }
+        };
+        return iterator;
+    }
+    [(_b = Symbol.toStringTag, Symbol.iterator)]() {
+        return this.entries();
+    }
+    trimOld(newSize) {
         if (newSize >= this.size) {
             return;
         }
@@ -401,8 +275,8 @@ var LinkedMap = /** @class */ (function () {
             this.clear();
             return;
         }
-        var current = this._head;
-        var currentSize = this.size;
+        let current = this._head;
+        let currentSize = this.size;
         while (current && currentSize > newSize) {
             this._map.delete(current.key);
             current = current.next;
@@ -413,8 +287,31 @@ var LinkedMap = /** @class */ (function () {
         if (current) {
             current.previous = undefined;
         }
-    };
-    LinkedMap.prototype.addItemFirst = function (item) {
+        this._state++;
+    }
+    trimNew(newSize) {
+        if (newSize >= this.size) {
+            return;
+        }
+        if (newSize === 0) {
+            this.clear();
+            return;
+        }
+        let current = this._tail;
+        let currentSize = this.size;
+        while (current && currentSize > newSize) {
+            this._map.delete(current.key);
+            current = current.previous;
+            currentSize--;
+        }
+        this._tail = current;
+        this._size = currentSize;
+        if (current) {
+            current.next = undefined;
+        }
+        this._state++;
+    }
+    addItemFirst(item) {
         // First time Insert
         if (!this._head && !this._tail) {
             this._tail = item;
@@ -427,8 +324,9 @@ var LinkedMap = /** @class */ (function () {
             this._head.previous = item;
         }
         this._head = item;
-    };
-    LinkedMap.prototype.addItemLast = function (item) {
+        this._state++;
+    }
+    addItemLast(item) {
         // First time Insert
         if (!this._head && !this._tail) {
             this._head = item;
@@ -441,14 +339,15 @@ var LinkedMap = /** @class */ (function () {
             this._tail.next = item;
         }
         this._tail = item;
-    };
-    LinkedMap.prototype.removeItem = function (item) {
+        this._state++;
+    }
+    removeItem(item) {
         if (item === this._head && item === this._tail) {
             this._head = undefined;
             this._tail = undefined;
         }
         else if (item === this._head) {
-            // This can only happend if size === 1 which is handle
+            // This can only happen if size === 1 which is handled
             // by the case above.
             if (!item.next) {
                 throw new Error('Invalid list');
@@ -457,7 +356,7 @@ var LinkedMap = /** @class */ (function () {
             this._head = item.next;
         }
         else if (item === this._tail) {
-            // This can only happend if size === 1 which is handle
+            // This can only happen if size === 1 which is handled
             // by the case above.
             if (!item.previous) {
                 throw new Error('Invalid list');
@@ -466,8 +365,8 @@ var LinkedMap = /** @class */ (function () {
             this._tail = item.previous;
         }
         else {
-            var next = item.next;
-            var previous = item.previous;
+            const next = item.next;
+            const previous = item.previous;
             if (!next || !previous) {
                 throw new Error('Invalid list');
             }
@@ -476,20 +375,21 @@ var LinkedMap = /** @class */ (function () {
         }
         item.next = undefined;
         item.previous = undefined;
-    };
-    LinkedMap.prototype.touch = function (item, touch) {
+        this._state++;
+    }
+    touch(item, touch) {
         if (!this._head || !this._tail) {
             throw new Error('Invalid list');
         }
-        if ((touch !== 1 /* AsOld */ && touch !== 2 /* AsNew */)) {
+        if ((touch !== 1 /* Touch.AsOld */ && touch !== 2 /* Touch.AsNew */)) {
             return;
         }
-        if (touch === 1 /* AsOld */) {
+        if (touch === 1 /* Touch.AsOld */) {
             if (item === this._head) {
                 return;
             }
-            var next = item.next;
-            var previous = item.previous;
+            const next = item.next;
+            const previous = item.previous;
             // Unlink the item
             if (item === this._tail) {
                 // previous must be defined since item was not head but is tail
@@ -507,13 +407,14 @@ var LinkedMap = /** @class */ (function () {
             item.next = this._head;
             this._head.previous = item;
             this._head = item;
+            this._state++;
         }
-        else if (touch === 2 /* AsNew */) {
+        else if (touch === 2 /* Touch.AsNew */) {
             if (item === this._tail) {
                 return;
             }
-            var next = item.next;
-            var previous = item.previous;
+            const next = item.next;
+            const previous = item.previous;
             // Unlink the item.
             if (item === this._head) {
                 // next must be defined since item was not tail but is head
@@ -530,42 +431,143 @@ var LinkedMap = /** @class */ (function () {
             item.previous = this._tail;
             this._tail.next = item;
             this._tail = item;
+            this._state++;
         }
-    };
-    LinkedMap.prototype.toJSON = function () {
-        var data = [];
-        this.forEach(function (value, key) {
+    }
+    toJSON() {
+        const data = [];
+        this.forEach((value, key) => {
             data.push([key, value]);
         });
         return data;
-    };
-    return LinkedMap;
-}());
-export { LinkedMap };
-var LRUCache = /** @class */ (function (_super) {
-    __extends(LRUCache, _super);
-    function LRUCache(limit, ratio) {
-        if (ratio === void 0) { ratio = 1; }
-        var _this = _super.call(this) || this;
-        _this._limit = limit;
-        _this._ratio = Math.min(Math.max(0, ratio), 1);
-        return _this;
     }
-    LRUCache.prototype.get = function (key) {
-        return _super.prototype.get.call(this, key, 2 /* AsNew */);
-    };
-    LRUCache.prototype.peek = function (key) {
-        return _super.prototype.get.call(this, key, 0 /* None */);
-    };
-    LRUCache.prototype.set = function (key, value) {
-        _super.prototype.set.call(this, key, value, 2 /* AsNew */);
-        this.checkTrim();
-    };
-    LRUCache.prototype.checkTrim = function () {
-        if (this.size > this._limit) {
-            this.trimOld(Math.round(this._limit * this._ratio));
+    fromJSON(data) {
+        this.clear();
+        for (const [key, value] of data) {
+            this.set(key, value);
         }
-    };
-    return LRUCache;
-}(LinkedMap));
-export { LRUCache };
+    }
+}
+class Cache extends LinkedMap {
+    constructor(limit, ratio = 1) {
+        super();
+        this._limit = limit;
+        this._ratio = Math.min(Math.max(0, ratio), 1);
+    }
+    get limit() {
+        return this._limit;
+    }
+    set limit(limit) {
+        this._limit = limit;
+        this.checkTrim();
+    }
+    get(key, touch = 2 /* Touch.AsNew */) {
+        return super.get(key, touch);
+    }
+    peek(key) {
+        return super.get(key, 0 /* Touch.None */);
+    }
+    set(key, value) {
+        super.set(key, value, 2 /* Touch.AsNew */);
+        return this;
+    }
+    checkTrim() {
+        if (this.size > this._limit) {
+            this.trim(Math.round(this._limit * this._ratio));
+        }
+    }
+}
+export class LRUCache extends Cache {
+    constructor(limit, ratio = 1) {
+        super(limit, ratio);
+    }
+    trim(newSize) {
+        this.trimOld(newSize);
+    }
+    set(key, value) {
+        super.set(key, value);
+        this.checkTrim();
+        return this;
+    }
+}
+/**
+ * A map that allows access both by keys and values.
+ * **NOTE**: values need to be unique.
+ */
+export class BidirectionalMap {
+    constructor(entries) {
+        this._m1 = new Map();
+        this._m2 = new Map();
+        if (entries) {
+            for (const [key, value] of entries) {
+                this.set(key, value);
+            }
+        }
+    }
+    clear() {
+        this._m1.clear();
+        this._m2.clear();
+    }
+    set(key, value) {
+        this._m1.set(key, value);
+        this._m2.set(value, key);
+    }
+    get(key) {
+        return this._m1.get(key);
+    }
+    getKey(value) {
+        return this._m2.get(value);
+    }
+    delete(key) {
+        const value = this._m1.get(key);
+        if (value === undefined) {
+            return false;
+        }
+        this._m1.delete(key);
+        this._m2.delete(value);
+        return true;
+    }
+    keys() {
+        return this._m1.keys();
+    }
+    values() {
+        return this._m1.values();
+    }
+}
+export class SetMap {
+    constructor() {
+        this.map = new Map();
+    }
+    add(key, value) {
+        let values = this.map.get(key);
+        if (!values) {
+            values = new Set();
+            this.map.set(key, values);
+        }
+        values.add(value);
+    }
+    delete(key, value) {
+        const values = this.map.get(key);
+        if (!values) {
+            return;
+        }
+        values.delete(value);
+        if (values.size === 0) {
+            this.map.delete(key);
+        }
+    }
+    forEach(key, fn) {
+        const values = this.map.get(key);
+        if (!values) {
+            return;
+        }
+        values.forEach(fn);
+    }
+    get(key) {
+        const values = this.map.get(key);
+        if (!values) {
+            return new Set();
+        }
+        return values;
+    }
+}

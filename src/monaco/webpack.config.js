@@ -23,63 +23,64 @@ const outdirname = `monaco-${monacoVersion}`
 console.log(`webpack building monaco at ${process.cwd()} -> ${outdirname}`)
 
 module.exports = (env, argv) => {
-const mode = argv.mode == 'production' ? 'production' : 'development'
-const isDevMode = mode == 'development'
-return {
-  mode,
-  devtool: false,
-  entry: { monaco: "./monaco.js" },
-  resolve: { extensions: ['.js'] },
-  output: {
-    filename: `${outdirname}/[name].js`,
-    path: path.join(builddir, isDevMode ? "dev" : "release"),
-  },
-  module: {
-    rules: [
-      {
-        test: /\.css$/,
-        use: [
-          { loader: MiniCssExtractPlugin.loader },
-          'css-loader',
-        ],
-      },
-      {
-        test: /\.(woff(2)?|ttf|eot|svg)$/,
-        use: {
-          loader: 'url-loader',
+  const mode = argv.mode == 'production' ? 'production' : 'development'
+  const isDevMode = mode == 'development'
+  return {
+    mode,
+    devtool: false,
+    entry: { monaco: "./monaco.js" },
+    resolve: { extensions: ['.js'] },
+    output: {
+      filename: `${outdirname}/[name].js`,
+      path: path.join(builddir, isDevMode ? "dev" : "release"),
+    },
+    module: {
+      rules: [
+        {
+          test: /\.css$/,
+          use: [
+            { loader: MiniCssExtractPlugin.loader },
+            'css-loader',
+          ],
         },
-      },
-    ]
-  },
+        {
+          test: /\.(woff(2)?|ttf|eot|svg)$/,
+          use: {
+            loader: 'url-loader',
+          },
+        },
+      ]
+    },
 
-  // see https://github.com/webpack-contrib/mini-css-extract-plugin#minimizing-for-production
-  optimization: isDevMode ? {} : {
-    minimizer: [
-      new TerserJSPlugin({
-        cache: path.join(builddir, '.terser-cache'),
-        parallel: true,
+    // see https://github.com/webpack-contrib/mini-css-extract-plugin#minimizing-for-production
+    optimization: isDevMode ? {} : {
+      minimizer: [
+        new TerserJSPlugin({
+          // cache: path.join(builddir, '.terser-cache'),
+          parallel: true,
+        }),
+        new OptimizeCSSAssetsPlugin({}),
+      ],
+    },
+
+    plugins: [
+
+      new MiniCssExtractPlugin({
+        filename: `${outdirname}/[name].css`,
+        chunkFilename: `${outdirname}/[id].css`,
+        ignoreOrder: false, // Enable to remove warnings about conflicting order
       }),
-      new OptimizeCSSAssetsPlugin({}),
+
+      new MonacoWebpackPlugin({
+        languages: ["typescript"],
+        publicPath: "/",
+        filename: `${outdirname}/[name].worker.js`,
+        // TODO: slim things down by specifying only required features.
+        // https://github.com/Microsoft/monaco-editor-webpack-plugin#options
+      }),
+
+      new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
+      // new HtmlWebpackInlineSourcePlugin(),
     ],
-  },
-
-  plugins: [
-
-    new MiniCssExtractPlugin({
-      filename:      `${outdirname}/[name].css`,
-      chunkFilename: `${outdirname}/[id].css`,
-      ignoreOrder: false, // Enable to remove warnings about conflicting order
-    }),
-
-    new MonacoWebpackPlugin({
-      languages: [ "typescript" ],
-      publicPath: "/",
-      filename: `${outdirname}/[name].worker.js`,
-      // TODO: slim things down by specifying only required features.
-      // https://github.com/Microsoft/monaco-editor-webpack-plugin#options
-    }),
-
-    new webpack.optimize.LimitChunkCountPlugin({ maxChunks: 1 }),
-    // new HtmlWebpackInlineSourcePlugin(),
-  ],
-}}
+  }
+}

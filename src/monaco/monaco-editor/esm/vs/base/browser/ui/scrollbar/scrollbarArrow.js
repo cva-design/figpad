@@ -2,88 +2,74 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-import { GlobalMouseMoveMonitor, standardMouseMoveMerger } from '../../globalMouseMoveMonitor.js';
+import { GlobalPointerMoveMonitor } from '../../globalPointerMoveMonitor.js';
 import { Widget } from '../widget.js';
-import { IntervalTimer, TimeoutTimer } from '../../../common/async.js';
+import { TimeoutTimer } from '../../../common/async.js';
+import { ThemeIcon } from '../../../common/themables.js';
+import * as dom from '../../dom.js';
 /**
  * The arrow image size.
  */
-export var ARROW_IMG_SIZE = 11;
-var ScrollbarArrow = /** @class */ (function (_super) {
-    __extends(ScrollbarArrow, _super);
-    function ScrollbarArrow(opts) {
-        var _this = _super.call(this) || this;
-        _this._onActivate = opts.onActivate;
-        _this.bgDomNode = document.createElement('div');
-        _this.bgDomNode.className = 'arrow-background';
-        _this.bgDomNode.style.position = 'absolute';
-        _this.bgDomNode.style.width = opts.bgWidth + 'px';
-        _this.bgDomNode.style.height = opts.bgHeight + 'px';
+export const ARROW_IMG_SIZE = 11;
+export class ScrollbarArrow extends Widget {
+    constructor(opts) {
+        super();
+        this._onActivate = opts.onActivate;
+        this.bgDomNode = document.createElement('div');
+        this.bgDomNode.className = 'arrow-background';
+        this.bgDomNode.style.position = 'absolute';
+        this.bgDomNode.style.width = opts.bgWidth + 'px';
+        this.bgDomNode.style.height = opts.bgHeight + 'px';
         if (typeof opts.top !== 'undefined') {
-            _this.bgDomNode.style.top = '0px';
+            this.bgDomNode.style.top = '0px';
         }
         if (typeof opts.left !== 'undefined') {
-            _this.bgDomNode.style.left = '0px';
+            this.bgDomNode.style.left = '0px';
         }
         if (typeof opts.bottom !== 'undefined') {
-            _this.bgDomNode.style.bottom = '0px';
+            this.bgDomNode.style.bottom = '0px';
         }
         if (typeof opts.right !== 'undefined') {
-            _this.bgDomNode.style.right = '0px';
+            this.bgDomNode.style.right = '0px';
         }
-        _this.domNode = document.createElement('div');
-        _this.domNode.className = opts.className;
-        _this.domNode.style.position = 'absolute';
-        _this.domNode.style.width = ARROW_IMG_SIZE + 'px';
-        _this.domNode.style.height = ARROW_IMG_SIZE + 'px';
+        this.domNode = document.createElement('div');
+        this.domNode.className = opts.className;
+        this.domNode.classList.add(...ThemeIcon.asClassNameArray(opts.icon));
+        this.domNode.style.position = 'absolute';
+        this.domNode.style.width = ARROW_IMG_SIZE + 'px';
+        this.domNode.style.height = ARROW_IMG_SIZE + 'px';
         if (typeof opts.top !== 'undefined') {
-            _this.domNode.style.top = opts.top + 'px';
+            this.domNode.style.top = opts.top + 'px';
         }
         if (typeof opts.left !== 'undefined') {
-            _this.domNode.style.left = opts.left + 'px';
+            this.domNode.style.left = opts.left + 'px';
         }
         if (typeof opts.bottom !== 'undefined') {
-            _this.domNode.style.bottom = opts.bottom + 'px';
+            this.domNode.style.bottom = opts.bottom + 'px';
         }
         if (typeof opts.right !== 'undefined') {
-            _this.domNode.style.right = opts.right + 'px';
+            this.domNode.style.right = opts.right + 'px';
         }
-        _this._mouseMoveMonitor = _this._register(new GlobalMouseMoveMonitor());
-        _this.onmousedown(_this.bgDomNode, function (e) { return _this._arrowMouseDown(e); });
-        _this.onmousedown(_this.domNode, function (e) { return _this._arrowMouseDown(e); });
-        _this._mousedownRepeatTimer = _this._register(new IntervalTimer());
-        _this._mousedownScheduleRepeatTimer = _this._register(new TimeoutTimer());
-        return _this;
+        this._pointerMoveMonitor = this._register(new GlobalPointerMoveMonitor());
+        this._register(dom.addStandardDisposableListener(this.bgDomNode, dom.EventType.POINTER_DOWN, (e) => this._arrowPointerDown(e)));
+        this._register(dom.addStandardDisposableListener(this.domNode, dom.EventType.POINTER_DOWN, (e) => this._arrowPointerDown(e)));
+        this._pointerdownRepeatTimer = this._register(new dom.WindowIntervalTimer());
+        this._pointerdownScheduleRepeatTimer = this._register(new TimeoutTimer());
     }
-    ScrollbarArrow.prototype._arrowMouseDown = function (e) {
-        var _this = this;
-        var scheduleRepeater = function () {
-            _this._mousedownRepeatTimer.cancelAndSet(function () { return _this._onActivate(); }, 1000 / 24);
+    _arrowPointerDown(e) {
+        if (!e.target || !(e.target instanceof Element)) {
+            return;
+        }
+        const scheduleRepeater = () => {
+            this._pointerdownRepeatTimer.cancelAndSet(() => this._onActivate(), 1000 / 24, dom.getWindow(e));
         };
         this._onActivate();
-        this._mousedownRepeatTimer.cancel();
-        this._mousedownScheduleRepeatTimer.cancelAndSet(scheduleRepeater, 200);
-        this._mouseMoveMonitor.startMonitoring(e.target, e.buttons, standardMouseMoveMerger, function (mouseMoveData) {
-            /* Intentional empty */
-        }, function () {
-            _this._mousedownRepeatTimer.cancel();
-            _this._mousedownScheduleRepeatTimer.cancel();
+        this._pointerdownRepeatTimer.cancel();
+        this._pointerdownScheduleRepeatTimer.cancelAndSet(scheduleRepeater, 200);
+        this._pointerMoveMonitor.startMonitoring(e.target, e.pointerId, e.buttons, (pointerMoveData) => { }, () => {
+            this._pointerdownRepeatTimer.cancel();
+            this._pointerdownScheduleRepeatTimer.cancel();
         });
         e.preventDefault();
-    };
-    return ScrollbarArrow;
-}(Widget));
-export { ScrollbarArrow };
+    }
+}

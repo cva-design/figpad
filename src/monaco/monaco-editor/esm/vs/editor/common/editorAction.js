@@ -2,25 +2,23 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var InternalEditorAction = /** @class */ (function () {
-    function InternalEditorAction(id, label, alias, precondition, run, contextKeyService) {
+export class InternalEditorAction {
+    constructor(id, label, alias, metadata, _precondition, _run, _contextKeyService) {
         this.id = id;
         this.label = label;
         this.alias = alias;
-        this._precondition = precondition;
-        this._run = run;
-        this._contextKeyService = contextKeyService;
+        this.metadata = metadata;
+        this._precondition = _precondition;
+        this._run = _run;
+        this._contextKeyService = _contextKeyService;
     }
-    InternalEditorAction.prototype.isSupported = function () {
+    isSupported() {
         return this._contextKeyService.contextMatchesRules(this._precondition);
-    };
-    InternalEditorAction.prototype.run = function () {
+    }
+    run(args) {
         if (!this.isSupported()) {
             return Promise.resolve(undefined);
         }
-        var r = this._run();
-        return r ? r : Promise.resolve(undefined);
-    };
-    return InternalEditorAction;
-}());
-export { InternalEditorAction };
+        return this._run(args);
+    }
+}

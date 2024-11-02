@@ -3,48 +3,48 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 export function getNodeColor(node) {
-    return ((node.metadata & 1 /* ColorMask */) >>> 0 /* ColorOffset */);
+    return ((node.metadata & 1 /* Constants.ColorMask */) >>> 0 /* Constants.ColorOffset */);
 }
 function setNodeColor(node, color) {
-    node.metadata = ((node.metadata & 254 /* ColorMaskInverse */) | (color << 0 /* ColorOffset */));
+    node.metadata = ((node.metadata & 254 /* Constants.ColorMaskInverse */) | (color << 0 /* Constants.ColorOffset */));
 }
 function getNodeIsVisited(node) {
-    return ((node.metadata & 2 /* IsVisitedMask */) >>> 1 /* IsVisitedOffset */) === 1;
+    return ((node.metadata & 2 /* Constants.IsVisitedMask */) >>> 1 /* Constants.IsVisitedOffset */) === 1;
 }
 function setNodeIsVisited(node, value) {
-    node.metadata = ((node.metadata & 253 /* IsVisitedMaskInverse */) | ((value ? 1 : 0) << 1 /* IsVisitedOffset */));
+    node.metadata = ((node.metadata & 253 /* Constants.IsVisitedMaskInverse */) | ((value ? 1 : 0) << 1 /* Constants.IsVisitedOffset */));
 }
 function getNodeIsForValidation(node) {
-    return ((node.metadata & 4 /* IsForValidationMask */) >>> 2 /* IsForValidationOffset */) === 1;
+    return ((node.metadata & 4 /* Constants.IsForValidationMask */) >>> 2 /* Constants.IsForValidationOffset */) === 1;
 }
 function setNodeIsForValidation(node, value) {
-    node.metadata = ((node.metadata & 251 /* IsForValidationMaskInverse */) | ((value ? 1 : 0) << 2 /* IsForValidationOffset */));
+    node.metadata = ((node.metadata & 251 /* Constants.IsForValidationMaskInverse */) | ((value ? 1 : 0) << 2 /* Constants.IsForValidationOffset */));
 }
-export function getNodeIsInOverviewRuler(node) {
-    return ((node.metadata & 8 /* IsInOverviewRulerMask */) >>> 3 /* IsInOverviewRulerOffset */) === 1;
+function getNodeIsInGlyphMargin(node) {
+    return ((node.metadata & 64 /* Constants.IsMarginMask */) >>> 6 /* Constants.IsMarginOffset */) === 1;
 }
-function setNodeIsInOverviewRuler(node, value) {
-    node.metadata = ((node.metadata & 247 /* IsInOverviewRulerMaskInverse */) | ((value ? 1 : 0) << 3 /* IsInOverviewRulerOffset */));
+function setNodeIsInGlyphMargin(node, value) {
+    node.metadata = ((node.metadata & 191 /* Constants.IsMarginMaskInverse */) | ((value ? 1 : 0) << 6 /* Constants.IsMarginOffset */));
 }
 function getNodeStickiness(node) {
-    return ((node.metadata & 48 /* StickinessMask */) >>> 4 /* StickinessOffset */);
+    return ((node.metadata & 24 /* Constants.StickinessMask */) >>> 3 /* Constants.StickinessOffset */);
 }
 function _setNodeStickiness(node, stickiness) {
-    node.metadata = ((node.metadata & 207 /* StickinessMaskInverse */) | (stickiness << 4 /* StickinessOffset */));
+    node.metadata = ((node.metadata & 231 /* Constants.StickinessMaskInverse */) | (stickiness << 3 /* Constants.StickinessOffset */));
 }
 function getCollapseOnReplaceEdit(node) {
-    return ((node.metadata & 64 /* CollapseOnReplaceEditMask */) >>> 6 /* CollapseOnReplaceEditOffset */) === 1;
+    return ((node.metadata & 32 /* Constants.CollapseOnReplaceEditMask */) >>> 5 /* Constants.CollapseOnReplaceEditOffset */) === 1;
 }
 function setCollapseOnReplaceEdit(node, value) {
-    node.metadata = ((node.metadata & 191 /* CollapseOnReplaceEditMaskInverse */) | ((value ? 1 : 0) << 6 /* CollapseOnReplaceEditOffset */));
+    node.metadata = ((node.metadata & 223 /* Constants.CollapseOnReplaceEditMaskInverse */) | ((value ? 1 : 0) << 5 /* Constants.CollapseOnReplaceEditOffset */));
 }
-var IntervalNode = /** @class */ (function () {
-    function IntervalNode(id, start, end) {
+export class IntervalNode {
+    constructor(id, start, end) {
         this.metadata = 0;
         this.parent = this;
         this.left = this;
         this.right = this;
-        setNodeColor(this, 1 /* Red */);
+        setNodeColor(this, 1 /* NodeColor.Red */);
         this.start = start;
         this.end = end;
         // FORCE_OVERFLOWING_TEST: this.delta = start;
@@ -54,8 +54,8 @@ var IntervalNode = /** @class */ (function () {
         this.ownerId = 0;
         this.options = null;
         setNodeIsForValidation(this, false);
-        _setNodeStickiness(this, 1 /* NeverGrowsWhenTypingAtEdges */);
-        setNodeIsInOverviewRuler(this, false);
+        setNodeIsInGlyphMargin(this, false);
+        _setNodeStickiness(this, 1 /* TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges */);
         setCollapseOnReplaceEdit(this, false);
         this.cachedVersionId = 0;
         this.cachedAbsoluteStart = start;
@@ -63,7 +63,7 @@ var IntervalNode = /** @class */ (function () {
         this.range = null;
         setNodeIsVisited(this, false);
     }
-    IntervalNode.prototype.reset = function (versionId, start, end, range) {
+    reset(versionId, start, end, range) {
         this.start = start;
         this.end = end;
         this.maxEnd = end;
@@ -71,95 +71,93 @@ var IntervalNode = /** @class */ (function () {
         this.cachedAbsoluteStart = start;
         this.cachedAbsoluteEnd = end;
         this.range = range;
-    };
-    IntervalNode.prototype.setOptions = function (options) {
+    }
+    setOptions(options) {
         this.options = options;
-        var className = this.options.className;
-        setNodeIsForValidation(this, (className === "squiggly-error" /* EditorErrorDecoration */
-            || className === "squiggly-warning" /* EditorWarningDecoration */
-            || className === "squiggly-info" /* EditorInfoDecoration */));
+        const className = this.options.className;
+        setNodeIsForValidation(this, (className === "squiggly-error" /* ClassName.EditorErrorDecoration */
+            || className === "squiggly-warning" /* ClassName.EditorWarningDecoration */
+            || className === "squiggly-info" /* ClassName.EditorInfoDecoration */));
+        setNodeIsInGlyphMargin(this, this.options.glyphMarginClassName !== null);
         _setNodeStickiness(this, this.options.stickiness);
-        setNodeIsInOverviewRuler(this, (this.options.overviewRuler && this.options.overviewRuler.color) ? true : false);
         setCollapseOnReplaceEdit(this, this.options.collapseOnReplaceEdit);
-    };
-    IntervalNode.prototype.setCachedOffsets = function (absoluteStart, absoluteEnd, cachedVersionId) {
+    }
+    setCachedOffsets(absoluteStart, absoluteEnd, cachedVersionId) {
         if (this.cachedVersionId !== cachedVersionId) {
             this.range = null;
         }
         this.cachedVersionId = cachedVersionId;
         this.cachedAbsoluteStart = absoluteStart;
         this.cachedAbsoluteEnd = absoluteEnd;
-    };
-    IntervalNode.prototype.detach = function () {
+    }
+    detach() {
         this.parent = null;
         this.left = null;
         this.right = null;
-    };
-    return IntervalNode;
-}());
-export { IntervalNode };
-export var SENTINEL = new IntervalNode(null, 0, 0);
+    }
+}
+export const SENTINEL = new IntervalNode(null, 0, 0);
 SENTINEL.parent = SENTINEL;
 SENTINEL.left = SENTINEL;
 SENTINEL.right = SENTINEL;
-setNodeColor(SENTINEL, 0 /* Black */);
-var IntervalTree = /** @class */ (function () {
-    function IntervalTree() {
+setNodeColor(SENTINEL, 0 /* NodeColor.Black */);
+export class IntervalTree {
+    constructor() {
         this.root = SENTINEL;
         this.requestNormalizeDelta = false;
     }
-    IntervalTree.prototype.intervalSearch = function (start, end, filterOwnerId, filterOutValidation, cachedVersionId) {
+    intervalSearch(start, end, filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations) {
         if (this.root === SENTINEL) {
             return [];
         }
-        return intervalSearch(this, start, end, filterOwnerId, filterOutValidation, cachedVersionId);
-    };
-    IntervalTree.prototype.search = function (filterOwnerId, filterOutValidation, cachedVersionId) {
+        return intervalSearch(this, start, end, filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations);
+    }
+    search(filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations) {
         if (this.root === SENTINEL) {
             return [];
         }
-        return search(this, filterOwnerId, filterOutValidation, cachedVersionId);
-    };
+        return search(this, filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations);
+    }
     /**
      * Will not set `cachedAbsoluteStart` nor `cachedAbsoluteEnd` on the returned nodes!
      */
-    IntervalTree.prototype.collectNodesFromOwner = function (ownerId) {
+    collectNodesFromOwner(ownerId) {
         return collectNodesFromOwner(this, ownerId);
-    };
+    }
     /**
      * Will not set `cachedAbsoluteStart` nor `cachedAbsoluteEnd` on the returned nodes!
      */
-    IntervalTree.prototype.collectNodesPostOrder = function () {
+    collectNodesPostOrder() {
         return collectNodesPostOrder(this);
-    };
-    IntervalTree.prototype.insert = function (node) {
+    }
+    insert(node) {
         rbTreeInsert(this, node);
         this._normalizeDeltaIfNecessary();
-    };
-    IntervalTree.prototype.delete = function (node) {
+    }
+    delete(node) {
         rbTreeDelete(this, node);
         this._normalizeDeltaIfNecessary();
-    };
-    IntervalTree.prototype.resolveNode = function (node, cachedVersionId) {
-        var initialNode = node;
-        var delta = 0;
+    }
+    resolveNode(node, cachedVersionId) {
+        const initialNode = node;
+        let delta = 0;
         while (node !== this.root) {
             if (node === node.parent.right) {
                 delta += node.parent.delta;
             }
             node = node.parent;
         }
-        var nodeStart = initialNode.start + delta;
-        var nodeEnd = initialNode.end + delta;
+        const nodeStart = initialNode.start + delta;
+        const nodeEnd = initialNode.end + delta;
         initialNode.setCachedOffsets(nodeStart, nodeEnd, cachedVersionId);
-    };
-    IntervalTree.prototype.acceptReplace = function (offset, length, textLength, forceMoveMarkers) {
+    }
+    acceptReplace(offset, length, textLength, forceMoveMarkers) {
         // Our strategy is to remove all directly impacted nodes, and then add them back to the tree.
         // (1) collect all nodes that are intersecting this edit as nodes of interest
-        var nodesOfInterest = searchForEditing(this, offset, offset + length);
+        const nodesOfInterest = searchForEditing(this, offset, offset + length);
         // (2) remove all nodes that are intersecting this edit
-        for (var i = 0, len = nodesOfInterest.length; i < len; i++) {
-            var node = nodesOfInterest[i];
+        for (let i = 0, len = nodesOfInterest.length; i < len; i++) {
+            const node = nodesOfInterest[i];
             rbTreeDelete(this, node);
         }
         this._normalizeDeltaIfNecessary();
@@ -167,8 +165,8 @@ var IntervalTree = /** @class */ (function () {
         noOverlapReplace(this, offset, offset + length, textLength);
         this._normalizeDeltaIfNecessary();
         // (4) edit the nodes of interest and insert them back in the tree
-        for (var i = 0, len = nodesOfInterest.length; i < len; i++) {
-            var node = nodesOfInterest[i];
+        for (let i = 0, len = nodesOfInterest.length; i < len; i++) {
+            const node = nodesOfInterest[i];
             node.start = node.cachedAbsoluteStart;
             node.end = node.cachedAbsoluteEnd;
             nodeAcceptEdit(node, offset, (offset + length), textLength, forceMoveMarkers);
@@ -176,21 +174,19 @@ var IntervalTree = /** @class */ (function () {
             rbTreeInsert(this, node);
         }
         this._normalizeDeltaIfNecessary();
-    };
-    IntervalTree.prototype._normalizeDeltaIfNecessary = function () {
+    }
+    _normalizeDeltaIfNecessary() {
         if (!this.requestNormalizeDelta) {
             return;
         }
         this.requestNormalizeDelta = false;
         normalizeDelta(this);
-    };
-    return IntervalTree;
-}());
-export { IntervalTree };
+    }
+}
 //#region Delta Normalization
 function normalizeDelta(T) {
-    var node = T.root;
-    var delta = 0;
+    let node = T.root;
+    let delta = 0;
     while (node !== SENTINEL) {
         if (node.left !== SENTINEL && !getNodeIsVisited(node.left)) {
             // go left
@@ -226,10 +222,10 @@ function adjustMarkerBeforeColumn(markerOffset, markerStickToPreviousCharacter, 
     if (markerOffset > checkOffset) {
         return false;
     }
-    if (moveSemantics === 1 /* ForceMove */) {
+    if (moveSemantics === 1 /* MarkerMoveSemantics.ForceMove */) {
         return false;
     }
-    if (moveSemantics === 2 /* ForceStay */) {
+    if (moveSemantics === 2 /* MarkerMoveSemantics.ForceStay */) {
         return true;
     }
     return markerStickToPreviousCharacter;
@@ -239,18 +235,18 @@ function adjustMarkerBeforeColumn(markerOffset, markerStickToPreviousCharacter, 
  * as when decorations were implemented using two markers.
  */
 export function nodeAcceptEdit(node, start, end, textLength, forceMoveMarkers) {
-    var nodeStickiness = getNodeStickiness(node);
-    var startStickToPreviousCharacter = (nodeStickiness === 0 /* AlwaysGrowsWhenTypingAtEdges */
-        || nodeStickiness === 2 /* GrowsOnlyWhenTypingBefore */);
-    var endStickToPreviousCharacter = (nodeStickiness === 1 /* NeverGrowsWhenTypingAtEdges */
-        || nodeStickiness === 2 /* GrowsOnlyWhenTypingBefore */);
-    var deletingCnt = (end - start);
-    var insertingCnt = textLength;
-    var commonLength = Math.min(deletingCnt, insertingCnt);
-    var nodeStart = node.start;
-    var startDone = false;
-    var nodeEnd = node.end;
-    var endDone = false;
+    const nodeStickiness = getNodeStickiness(node);
+    const startStickToPreviousCharacter = (nodeStickiness === 0 /* TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges */
+        || nodeStickiness === 2 /* TrackedRangeStickiness.GrowsOnlyWhenTypingBefore */);
+    const endStickToPreviousCharacter = (nodeStickiness === 1 /* TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges */
+        || nodeStickiness === 2 /* TrackedRangeStickiness.GrowsOnlyWhenTypingBefore */);
+    const deletingCnt = (end - start);
+    const insertingCnt = textLength;
+    const commonLength = Math.min(deletingCnt, insertingCnt);
+    const nodeStart = node.start;
+    let startDone = false;
+    const nodeEnd = node.end;
+    let endDone = false;
     if (start <= nodeStart && nodeEnd <= end && getCollapseOnReplaceEdit(node)) {
         // This edit encompasses the entire decoration range
         // and the decoration has asked to become collapsed
@@ -260,7 +256,7 @@ export function nodeAcceptEdit(node, start, end, textLength, forceMoveMarkers) {
         endDone = true;
     }
     {
-        var moveSemantics = forceMoveMarkers ? 1 /* ForceMove */ : (deletingCnt > 0 ? 2 /* ForceStay */ : 0 /* MarkerDefined */);
+        const moveSemantics = forceMoveMarkers ? 1 /* MarkerMoveSemantics.ForceMove */ : (deletingCnt > 0 ? 2 /* MarkerMoveSemantics.ForceStay */ : 0 /* MarkerMoveSemantics.MarkerDefined */);
         if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, start, moveSemantics)) {
             startDone = true;
         }
@@ -269,7 +265,7 @@ export function nodeAcceptEdit(node, start, end, textLength, forceMoveMarkers) {
         }
     }
     if (commonLength > 0 && !forceMoveMarkers) {
-        var moveSemantics = (deletingCnt > insertingCnt ? 2 /* ForceStay */ : 0 /* MarkerDefined */);
+        const moveSemantics = (deletingCnt > insertingCnt ? 2 /* MarkerMoveSemantics.ForceStay */ : 0 /* MarkerMoveSemantics.MarkerDefined */);
         if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, start + commonLength, moveSemantics)) {
             startDone = true;
         }
@@ -278,7 +274,7 @@ export function nodeAcceptEdit(node, start, end, textLength, forceMoveMarkers) {
         }
     }
     {
-        var moveSemantics = forceMoveMarkers ? 1 /* ForceMove */ : 0 /* MarkerDefined */;
+        const moveSemantics = forceMoveMarkers ? 1 /* MarkerMoveSemantics.ForceMove */ : 0 /* MarkerMoveSemantics.MarkerDefined */;
         if (!startDone && adjustMarkerBeforeColumn(nodeStart, startStickToPreviousCharacter, end, moveSemantics)) {
             node.start = start + insertingCnt;
             startDone = true;
@@ -289,7 +285,7 @@ export function nodeAcceptEdit(node, start, end, textLength, forceMoveMarkers) {
         }
     }
     // Finish
-    var deltaColumn = (insertingCnt - deletingCnt);
+    const deltaColumn = (insertingCnt - deletingCnt);
     if (!startDone) {
         node.start = Math.max(0, nodeStart + deltaColumn);
     }
@@ -307,13 +303,13 @@ function searchForEditing(T, start, end) {
     // nodes overlapping with a given interval, you can immediately skip:
     //  a) all nodes to the right of nodes whose low value is past the end of the given interval.
     //  b) all nodes that have their maximum 'high' value below the start of the given interval.
-    var node = T.root;
-    var delta = 0;
-    var nodeMaxEnd = 0;
-    var nodeStart = 0;
-    var nodeEnd = 0;
-    var result = [];
-    var resultLen = 0;
+    let node = T.root;
+    let delta = 0;
+    let nodeMaxEnd = 0;
+    let nodeStart = 0;
+    let nodeEnd = 0;
+    const result = [];
+    let resultLen = 0;
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -371,11 +367,11 @@ function noOverlapReplace(T, start, end, textLength) {
     // nodes overlapping with a given interval, you can immediately skip:
     //  a) all nodes to the right of nodes whose low value is past the end of the given interval.
     //  b) all nodes that have their maximum 'high' value below the start of the given interval.
-    var node = T.root;
-    var delta = 0;
-    var nodeMaxEnd = 0;
-    var nodeStart = 0;
-    var editDelta = (textLength - (end - start));
+    let node = T.root;
+    let delta = 0;
+    let nodeMaxEnd = 0;
+    let nodeStart = 0;
+    const editDelta = (textLength - (end - start));
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -409,7 +405,7 @@ function noOverlapReplace(T, start, end, textLength) {
             node.start += editDelta;
             node.end += editDelta;
             node.delta += editDelta;
-            if (node.delta < -1073741824 /* MIN_SAFE_DELTA */ || node.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+            if (node.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || node.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
                 T.requestNormalizeDelta = true;
             }
             // cover case a) from above
@@ -430,9 +426,9 @@ function noOverlapReplace(T, start, end, textLength) {
 //#endregion
 //#region Searching
 function collectNodesFromOwner(T, ownerId) {
-    var node = T.root;
-    var result = [];
-    var resultLen = 0;
+    let node = T.root;
+    const result = [];
+    let resultLen = 0;
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -461,9 +457,9 @@ function collectNodesFromOwner(T, ownerId) {
     return result;
 }
 function collectNodesPostOrder(T) {
-    var node = T.root;
-    var result = [];
-    var resultLen = 0;
+    let node = T.root;
+    const result = [];
+    let resultLen = 0;
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -489,13 +485,13 @@ function collectNodesPostOrder(T) {
     setNodeIsVisited(T.root, false);
     return result;
 }
-function search(T, filterOwnerId, filterOutValidation, cachedVersionId) {
-    var node = T.root;
-    var delta = 0;
-    var nodeStart = 0;
-    var nodeEnd = 0;
-    var result = [];
-    var resultLen = 0;
+function search(T, filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations) {
+    let node = T.root;
+    let delta = 0;
+    let nodeStart = 0;
+    let nodeEnd = 0;
+    const result = [];
+    let resultLen = 0;
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -516,11 +512,14 @@ function search(T, filterOwnerId, filterOutValidation, cachedVersionId) {
         nodeStart = delta + node.start;
         nodeEnd = delta + node.end;
         node.setCachedOffsets(nodeStart, nodeEnd, cachedVersionId);
-        var include = true;
+        let include = true;
         if (filterOwnerId && node.ownerId && node.ownerId !== filterOwnerId) {
             include = false;
         }
         if (filterOutValidation && getNodeIsForValidation(node)) {
+            include = false;
+        }
+        if (onlyMarginDecorations && !getNodeIsInGlyphMargin(node)) {
             include = false;
         }
         if (include) {
@@ -537,20 +536,20 @@ function search(T, filterOwnerId, filterOutValidation, cachedVersionId) {
     setNodeIsVisited(T.root, false);
     return result;
 }
-function intervalSearch(T, intervalStart, intervalEnd, filterOwnerId, filterOutValidation, cachedVersionId) {
+function intervalSearch(T, intervalStart, intervalEnd, filterOwnerId, filterOutValidation, cachedVersionId, onlyMarginDecorations) {
     // https://en.wikipedia.org/wiki/Interval_tree#Augmented_tree
     // Now, it is known that two intervals A and B overlap only when both
     // A.low <= B.high and A.high >= B.low. When searching the trees for
     // nodes overlapping with a given interval, you can immediately skip:
     //  a) all nodes to the right of nodes whose low value is past the end of the given interval.
     //  b) all nodes that have their maximum 'high' value below the start of the given interval.
-    var node = T.root;
-    var delta = 0;
-    var nodeMaxEnd = 0;
-    var nodeStart = 0;
-    var nodeEnd = 0;
-    var result = [];
-    var resultLen = 0;
+    let node = T.root;
+    let delta = 0;
+    let nodeMaxEnd = 0;
+    let nodeStart = 0;
+    let nodeEnd = 0;
+    const result = [];
+    let resultLen = 0;
     while (node !== SENTINEL) {
         if (getNodeIsVisited(node)) {
             // going up from this node
@@ -589,11 +588,14 @@ function intervalSearch(T, intervalStart, intervalEnd, filterOwnerId, filterOutV
         if (nodeEnd >= intervalStart) {
             // There is overlap
             node.setCachedOffsets(nodeStart, nodeEnd, cachedVersionId);
-            var include = true;
+            let include = true;
             if (filterOwnerId && node.ownerId && node.ownerId !== filterOwnerId) {
                 include = false;
             }
             if (filterOutValidation && getNodeIsForValidation(node)) {
+                include = false;
+            }
+            if (onlyMarginDecorations && !getNodeIsInGlyphMargin(node)) {
                 include = false;
             }
             if (include) {
@@ -618,21 +620,21 @@ function rbTreeInsert(T, newNode) {
         newNode.parent = SENTINEL;
         newNode.left = SENTINEL;
         newNode.right = SENTINEL;
-        setNodeColor(newNode, 0 /* Black */);
+        setNodeColor(newNode, 0 /* NodeColor.Black */);
         T.root = newNode;
         return T.root;
     }
     treeInsert(T, newNode);
     recomputeMaxEndWalkToRoot(newNode.parent);
     // repair tree
-    var x = newNode;
-    while (x !== T.root && getNodeColor(x.parent) === 1 /* Red */) {
+    let x = newNode;
+    while (x !== T.root && getNodeColor(x.parent) === 1 /* NodeColor.Red */) {
         if (x.parent === x.parent.parent.left) {
-            var y = x.parent.parent.right;
-            if (getNodeColor(y) === 1 /* Red */) {
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(y, 0 /* Black */);
-                setNodeColor(x.parent.parent, 1 /* Red */);
+            const y = x.parent.parent.right;
+            if (getNodeColor(y) === 1 /* NodeColor.Red */) {
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(y, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent.parent, 1 /* NodeColor.Red */);
                 x = x.parent.parent;
             }
             else {
@@ -640,17 +642,17 @@ function rbTreeInsert(T, newNode) {
                     x = x.parent;
                     leftRotate(T, x);
                 }
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(x.parent.parent, 1 /* Red */);
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent.parent, 1 /* NodeColor.Red */);
                 rightRotate(T, x.parent.parent);
             }
         }
         else {
-            var y = x.parent.parent.left;
-            if (getNodeColor(y) === 1 /* Red */) {
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(y, 0 /* Black */);
-                setNodeColor(x.parent.parent, 1 /* Red */);
+            const y = x.parent.parent.left;
+            if (getNodeColor(y) === 1 /* NodeColor.Red */) {
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(y, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent.parent, 1 /* NodeColor.Red */);
                 x = x.parent.parent;
             }
             else {
@@ -658,22 +660,22 @@ function rbTreeInsert(T, newNode) {
                     x = x.parent;
                     rightRotate(T, x);
                 }
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(x.parent.parent, 1 /* Red */);
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent.parent, 1 /* NodeColor.Red */);
                 leftRotate(T, x.parent.parent);
             }
         }
     }
-    setNodeColor(T.root, 0 /* Black */);
+    setNodeColor(T.root, 0 /* NodeColor.Black */);
     return newNode;
 }
 function treeInsert(T, z) {
-    var delta = 0;
-    var x = T.root;
-    var zAbsoluteStart = z.start;
-    var zAbsoluteEnd = z.end;
+    let delta = 0;
+    let x = T.root;
+    const zAbsoluteStart = z.start;
+    const zAbsoluteEnd = z.end;
     while (true) {
-        var cmp = intervalCompare(zAbsoluteStart, zAbsoluteEnd, x.start + delta, x.end + delta);
+        const cmp = intervalCompare(zAbsoluteStart, zAbsoluteEnd, x.start + delta, x.end + delta);
         if (cmp < 0) {
             // this node should be inserted to the left
             // => it is not affected by the node's delta
@@ -707,13 +709,13 @@ function treeInsert(T, z) {
     z.parent = x;
     z.left = SENTINEL;
     z.right = SENTINEL;
-    setNodeColor(z, 1 /* Red */);
+    setNodeColor(z, 1 /* NodeColor.Red */);
 }
 //#endregion
 //#region Deletion
 function rbTreeDelete(T, z) {
-    var x;
-    var y;
+    let x;
+    let y;
     // RB-DELETE except we don't swap z and y in case c)
     // i.e. we always delete what's pointed at by z.
     if (z.left === SENTINEL) {
@@ -721,7 +723,7 @@ function rbTreeDelete(T, z) {
         y = z;
         // x's delta is no longer influenced by z's delta
         x.delta += z.delta;
-        if (x.delta < -1073741824 /* MIN_SAFE_DELTA */ || x.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+        if (x.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || x.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
             T.requestNormalizeDelta = true;
         }
         x.start += z.delta;
@@ -740,26 +742,26 @@ function rbTreeDelete(T, z) {
         x.start += y.delta;
         x.end += y.delta;
         x.delta += y.delta;
-        if (x.delta < -1073741824 /* MIN_SAFE_DELTA */ || x.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+        if (x.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || x.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
             T.requestNormalizeDelta = true;
         }
         y.start += z.delta;
         y.end += z.delta;
         y.delta = z.delta;
-        if (y.delta < -1073741824 /* MIN_SAFE_DELTA */ || y.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+        if (y.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || y.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
             T.requestNormalizeDelta = true;
         }
     }
     if (y === T.root) {
         T.root = x;
-        setNodeColor(x, 0 /* Black */);
+        setNodeColor(x, 0 /* NodeColor.Black */);
         z.detach();
         resetSentinel();
         recomputeMaxEnd(x);
         T.root.parent = SENTINEL;
         return;
     }
-    var yWasRed = (getNodeColor(y) === 1 /* Red */);
+    const yWasRed = (getNodeColor(y) === 1 /* NodeColor.Red */);
     if (y === y.parent.left) {
         y.parent.left = x;
     }
@@ -815,62 +817,62 @@ function rbTreeDelete(T, z) {
         recomputeMaxEndWalkToRoot(y.parent);
     }
     // RB-DELETE-FIXUP
-    var w;
-    while (x !== T.root && getNodeColor(x) === 0 /* Black */) {
+    let w;
+    while (x !== T.root && getNodeColor(x) === 0 /* NodeColor.Black */) {
         if (x === x.parent.left) {
             w = x.parent.right;
-            if (getNodeColor(w) === 1 /* Red */) {
-                setNodeColor(w, 0 /* Black */);
-                setNodeColor(x.parent, 1 /* Red */);
+            if (getNodeColor(w) === 1 /* NodeColor.Red */) {
+                setNodeColor(w, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent, 1 /* NodeColor.Red */);
                 leftRotate(T, x.parent);
                 w = x.parent.right;
             }
-            if (getNodeColor(w.left) === 0 /* Black */ && getNodeColor(w.right) === 0 /* Black */) {
-                setNodeColor(w, 1 /* Red */);
+            if (getNodeColor(w.left) === 0 /* NodeColor.Black */ && getNodeColor(w.right) === 0 /* NodeColor.Black */) {
+                setNodeColor(w, 1 /* NodeColor.Red */);
                 x = x.parent;
             }
             else {
-                if (getNodeColor(w.right) === 0 /* Black */) {
-                    setNodeColor(w.left, 0 /* Black */);
-                    setNodeColor(w, 1 /* Red */);
+                if (getNodeColor(w.right) === 0 /* NodeColor.Black */) {
+                    setNodeColor(w.left, 0 /* NodeColor.Black */);
+                    setNodeColor(w, 1 /* NodeColor.Red */);
                     rightRotate(T, w);
                     w = x.parent.right;
                 }
                 setNodeColor(w, getNodeColor(x.parent));
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(w.right, 0 /* Black */);
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(w.right, 0 /* NodeColor.Black */);
                 leftRotate(T, x.parent);
                 x = T.root;
             }
         }
         else {
             w = x.parent.left;
-            if (getNodeColor(w) === 1 /* Red */) {
-                setNodeColor(w, 0 /* Black */);
-                setNodeColor(x.parent, 1 /* Red */);
+            if (getNodeColor(w) === 1 /* NodeColor.Red */) {
+                setNodeColor(w, 0 /* NodeColor.Black */);
+                setNodeColor(x.parent, 1 /* NodeColor.Red */);
                 rightRotate(T, x.parent);
                 w = x.parent.left;
             }
-            if (getNodeColor(w.left) === 0 /* Black */ && getNodeColor(w.right) === 0 /* Black */) {
-                setNodeColor(w, 1 /* Red */);
+            if (getNodeColor(w.left) === 0 /* NodeColor.Black */ && getNodeColor(w.right) === 0 /* NodeColor.Black */) {
+                setNodeColor(w, 1 /* NodeColor.Red */);
                 x = x.parent;
             }
             else {
-                if (getNodeColor(w.left) === 0 /* Black */) {
-                    setNodeColor(w.right, 0 /* Black */);
-                    setNodeColor(w, 1 /* Red */);
+                if (getNodeColor(w.left) === 0 /* NodeColor.Black */) {
+                    setNodeColor(w.right, 0 /* NodeColor.Black */);
+                    setNodeColor(w, 1 /* NodeColor.Red */);
                     leftRotate(T, w);
                     w = x.parent.left;
                 }
                 setNodeColor(w, getNodeColor(x.parent));
-                setNodeColor(x.parent, 0 /* Black */);
-                setNodeColor(w.left, 0 /* Black */);
+                setNodeColor(x.parent, 0 /* NodeColor.Black */);
+                setNodeColor(w.left, 0 /* NodeColor.Black */);
                 rightRotate(T, x.parent);
                 x = T.root;
             }
         }
     }
-    setNodeColor(x, 0 /* Black */);
+    setNodeColor(x, 0 /* NodeColor.Black */);
     resetSentinel();
 }
 function leftest(node) {
@@ -888,9 +890,9 @@ function resetSentinel() {
 //#endregion
 //#region Rotations
 function leftRotate(T, x) {
-    var y = x.right; // set y.
+    const y = x.right; // set y.
     y.delta += x.delta; // y's delta is no longer influenced by x's delta
-    if (y.delta < -1073741824 /* MIN_SAFE_DELTA */ || y.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+    if (y.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || y.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
         T.requestNormalizeDelta = true;
     }
     y.start += x.delta;
@@ -915,9 +917,9 @@ function leftRotate(T, x) {
     recomputeMaxEnd(y);
 }
 function rightRotate(T, y) {
-    var x = y.left;
+    const x = y.left;
     y.delta -= x.delta;
-    if (y.delta < -1073741824 /* MIN_SAFE_DELTA */ || y.delta > 1073741824 /* MAX_SAFE_DELTA */) {
+    if (y.delta < -1073741824 /* Constants.MIN_SAFE_DELTA */ || y.delta > 1073741824 /* Constants.MAX_SAFE_DELTA */) {
         T.requestNormalizeDelta = true;
     }
     y.start -= x.delta;
@@ -944,15 +946,15 @@ function rightRotate(T, y) {
 //#endregion
 //#region max end computation
 function computeMaxEnd(node) {
-    var maxEnd = node.end;
+    let maxEnd = node.end;
     if (node.left !== SENTINEL) {
-        var leftMaxEnd = node.left.maxEnd;
+        const leftMaxEnd = node.left.maxEnd;
         if (leftMaxEnd > maxEnd) {
             maxEnd = leftMaxEnd;
         }
     }
     if (node.right !== SENTINEL) {
-        var rightMaxEnd = node.right.maxEnd + node.delta;
+        const rightMaxEnd = node.right.maxEnd + node.delta;
         if (rightMaxEnd > maxEnd) {
             maxEnd = rightMaxEnd;
         }
@@ -964,7 +966,7 @@ export function recomputeMaxEnd(node) {
 }
 function recomputeMaxEndWalkToRoot(node) {
     while (node !== SENTINEL) {
-        var maxEnd = computeMaxEnd(node);
+        const maxEnd = computeMaxEnd(node);
         if (node.maxEnd === maxEnd) {
             // no need to go further
             return;

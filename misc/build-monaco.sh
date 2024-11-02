@@ -8,7 +8,7 @@ if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
 fi
 
 OPT_DEBUG=false
-WEBPACK_ARGS=( --display=errors-only )
+WEBPACK_ARGS=()
 if [[ "$1" == "-debug" ]]; then
   shift
   OPT_DEBUG=true

@@ -1,86 +1,186 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-import { createDecorator } from '../../instantiation/common/instantiation.js';
-import { Emitter } from '../../../base/common/event.js';
+import { Emitter, Event, PauseableEmitter } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { isUndefinedOrNull } from '../../../base/common/types.js';
-export var IStorageService = createDecorator('storageService');
+import { InMemoryStorageDatabase, Storage, StorageHint } from '../../../base/parts/storage/common/storage.js';
+import { createDecorator } from '../../instantiation/common/instantiation.js';
+export const TARGET_KEY = '__$__targetStorageMarker';
+export const IStorageService = createDecorator('storageService');
 export var WillSaveStateReason;
 (function (WillSaveStateReason) {
+    /**
+     * No specific reason to save state.
+     */
     WillSaveStateReason[WillSaveStateReason["NONE"] = 0] = "NONE";
+    /**
+     * A hint that the workbench is about to shutdown.
+     */
     WillSaveStateReason[WillSaveStateReason["SHUTDOWN"] = 1] = "SHUTDOWN";
 })(WillSaveStateReason || (WillSaveStateReason = {}));
-var InMemoryStorageService = /** @class */ (function (_super) {
-    __extends(InMemoryStorageService, _super);
-    function InMemoryStorageService() {
-        var _this = _super !== null && _super.apply(this, arguments) || this;
-        _this._onDidChangeStorage = _this._register(new Emitter());
-        _this.onDidChangeStorage = _this._onDidChangeStorage.event;
-        _this._onWillSaveState = _this._register(new Emitter());
-        _this.onWillSaveState = _this._onWillSaveState.event;
-        _this.globalCache = new Map();
-        _this.workspaceCache = new Map();
-        return _this;
+export function loadKeyTargets(storage) {
+    const keysRaw = storage.get(TARGET_KEY);
+    if (keysRaw) {
+        try {
+            return JSON.parse(keysRaw);
+        }
+        catch (error) {
+            // Fail gracefully
+        }
     }
-    InMemoryStorageService.prototype.getCache = function (scope) {
-        return scope === 0 /* GLOBAL */ ? this.globalCache : this.workspaceCache;
-    };
-    InMemoryStorageService.prototype.get = function (key, scope, fallbackValue) {
-        var value = this.getCache(scope).get(key);
-        if (isUndefinedOrNull(value)) {
-            return fallbackValue;
+    return Object.create(null);
+}
+export class AbstractStorageService extends Disposable {
+    static { this.DEFAULT_FLUSH_INTERVAL = 60 * 1000; } // every minute
+    constructor(options = { flushInterval: AbstractStorageService.DEFAULT_FLUSH_INTERVAL }) {
+        super();
+        this.options = options;
+        this._onDidChangeValue = this._register(new PauseableEmitter());
+        this._onDidChangeTarget = this._register(new PauseableEmitter());
+        this._onWillSaveState = this._register(new Emitter());
+        this.onWillSaveState = this._onWillSaveState.event;
+        this._workspaceKeyTargets = undefined;
+        this._profileKeyTargets = undefined;
+        this._applicationKeyTargets = undefined;
+    }
+    onDidChangeValue(scope, key, disposable) {
+        return Event.filter(this._onDidChangeValue.event, e => e.scope === scope && (key === undefined || e.key === key), disposable);
+    }
+    emitDidChangeValue(scope, event) {
+        const { key, external } = event;
+        // Specially handle `TARGET_KEY`
+        if (key === TARGET_KEY) {
+            // Clear our cached version which is now out of date
+            switch (scope) {
+                case -1 /* StorageScope.APPLICATION */:
+                    this._applicationKeyTargets = undefined;
+                    break;
+                case 0 /* StorageScope.PROFILE */:
+                    this._profileKeyTargets = undefined;
+                    break;
+                case 1 /* StorageScope.WORKSPACE */:
+                    this._workspaceKeyTargets = undefined;
+                    break;
+            }
+            // Emit as `didChangeTarget` event
+            this._onDidChangeTarget.fire({ scope });
         }
-        return value;
-    };
-    InMemoryStorageService.prototype.getBoolean = function (key, scope, fallbackValue) {
-        var value = this.getCache(scope).get(key);
-        if (isUndefinedOrNull(value)) {
-            return fallbackValue;
+        // Emit any other key to outside
+        else {
+            this._onDidChangeValue.fire({ scope, key, target: this.getKeyTargets(scope)[key], external });
         }
-        return value === 'true';
-    };
-    InMemoryStorageService.prototype.store = function (key, value, scope) {
+    }
+    get(key, scope, fallbackValue) {
+        return this.getStorage(scope)?.get(key, fallbackValue);
+    }
+    getBoolean(key, scope, fallbackValue) {
+        return this.getStorage(scope)?.getBoolean(key, fallbackValue);
+    }
+    getNumber(key, scope, fallbackValue) {
+        return this.getStorage(scope)?.getNumber(key, fallbackValue);
+    }
+    store(key, value, scope, target, external = false) {
         // We remove the key for undefined/null values
         if (isUndefinedOrNull(value)) {
-            return this.remove(key, scope);
+            this.remove(key, scope, external);
+            return;
         }
-        // Otherwise, convert to String and store
-        var valueStr = String(value);
-        // Return early if value already set
-        var currentValue = this.getCache(scope).get(key);
-        if (currentValue === valueStr) {
-            return Promise.resolve();
+        // Update our datastructures but send events only after
+        this.withPausedEmitters(() => {
+            // Update key-target map
+            this.updateKeyTarget(key, scope, target);
+            // Store actual value
+            this.getStorage(scope)?.set(key, value, external);
+        });
+    }
+    remove(key, scope, external = false) {
+        // Update our datastructures but send events only after
+        this.withPausedEmitters(() => {
+            // Update key-target map
+            this.updateKeyTarget(key, scope, undefined);
+            // Remove actual key
+            this.getStorage(scope)?.delete(key, external);
+        });
+    }
+    withPausedEmitters(fn) {
+        // Pause emitters
+        this._onDidChangeValue.pause();
+        this._onDidChangeTarget.pause();
+        try {
+            fn();
         }
-        // Update in cache
-        this.getCache(scope).set(key, valueStr);
-        // Events
-        this._onDidChangeStorage.fire({ scope: scope, key: key });
-        return Promise.resolve();
-    };
-    InMemoryStorageService.prototype.remove = function (key, scope) {
-        var wasDeleted = this.getCache(scope).delete(key);
-        if (!wasDeleted) {
-            return Promise.resolve(); // Return early if value already deleted
+        finally {
+            // Resume emitters
+            this._onDidChangeValue.resume();
+            this._onDidChangeTarget.resume();
         }
-        // Events
-        this._onDidChangeStorage.fire({ scope: scope, key: key });
-        return Promise.resolve();
-    };
-    return InMemoryStorageService;
-}(Disposable));
-export { InMemoryStorageService };
+    }
+    updateKeyTarget(key, scope, target, external = false) {
+        // Add
+        const keyTargets = this.getKeyTargets(scope);
+        if (typeof target === 'number') {
+            if (keyTargets[key] !== target) {
+                keyTargets[key] = target;
+                this.getStorage(scope)?.set(TARGET_KEY, JSON.stringify(keyTargets), external);
+            }
+        }
+        // Remove
+        else {
+            if (typeof keyTargets[key] === 'number') {
+                delete keyTargets[key];
+                this.getStorage(scope)?.set(TARGET_KEY, JSON.stringify(keyTargets), external);
+            }
+        }
+    }
+    get workspaceKeyTargets() {
+        if (!this._workspaceKeyTargets) {
+            this._workspaceKeyTargets = this.loadKeyTargets(1 /* StorageScope.WORKSPACE */);
+        }
+        return this._workspaceKeyTargets;
+    }
+    get profileKeyTargets() {
+        if (!this._profileKeyTargets) {
+            this._profileKeyTargets = this.loadKeyTargets(0 /* StorageScope.PROFILE */);
+        }
+        return this._profileKeyTargets;
+    }
+    get applicationKeyTargets() {
+        if (!this._applicationKeyTargets) {
+            this._applicationKeyTargets = this.loadKeyTargets(-1 /* StorageScope.APPLICATION */);
+        }
+        return this._applicationKeyTargets;
+    }
+    getKeyTargets(scope) {
+        switch (scope) {
+            case -1 /* StorageScope.APPLICATION */:
+                return this.applicationKeyTargets;
+            case 0 /* StorageScope.PROFILE */:
+                return this.profileKeyTargets;
+            default:
+                return this.workspaceKeyTargets;
+        }
+    }
+    loadKeyTargets(scope) {
+        const storage = this.getStorage(scope);
+        return storage ? loadKeyTargets(storage) : Object.create(null);
+    }
+}
+export class InMemoryStorageService extends AbstractStorageService {
+    constructor() {
+        super();
+        this.applicationStorage = this._register(new Storage(new InMemoryStorageDatabase(), { hint: StorageHint.STORAGE_IN_MEMORY }));
+        this.profileStorage = this._register(new Storage(new InMemoryStorageDatabase(), { hint: StorageHint.STORAGE_IN_MEMORY }));
+        this.workspaceStorage = this._register(new Storage(new InMemoryStorageDatabase(), { hint: StorageHint.STORAGE_IN_MEMORY }));
+        this._register(this.workspaceStorage.onDidChangeStorage(e => this.emitDidChangeValue(1 /* StorageScope.WORKSPACE */, e)));
+        this._register(this.profileStorage.onDidChangeStorage(e => this.emitDidChangeValue(0 /* StorageScope.PROFILE */, e)));
+        this._register(this.applicationStorage.onDidChangeStorage(e => this.emitDidChangeValue(-1 /* StorageScope.APPLICATION */, e)));
+    }
+    getStorage(scope) {
+        switch (scope) {
+            case -1 /* StorageScope.APPLICATION */:
+                return this.applicationStorage;
+            case 0 /* StorageScope.PROFILE */:
+                return this.profileStorage;
+            default:
+                return this.workspaceStorage;
+        }
+    }
+}

@@ -2,60 +2,51 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 import './overlayWidgets.css';
 import { createFastDomNode } from '../../../../base/browser/fastDomNode.js';
 import { PartFingerprints, ViewPart } from '../../view/viewPart.js';
-var ViewOverlayWidgets = /** @class */ (function (_super) {
-    __extends(ViewOverlayWidgets, _super);
-    function ViewOverlayWidgets(context) {
-        var _this = _super.call(this, context) || this;
-        var options = _this._context.configuration.options;
-        var layoutInfo = options.get(107 /* layoutInfo */);
-        _this._widgets = {};
-        _this._verticalScrollbarWidth = layoutInfo.verticalScrollbarWidth;
-        _this._minimapWidth = layoutInfo.minimapWidth;
-        _this._horizontalScrollbarHeight = layoutInfo.horizontalScrollbarHeight;
-        _this._editorHeight = layoutInfo.height;
-        _this._editorWidth = layoutInfo.width;
-        _this._domNode = createFastDomNode(document.createElement('div'));
-        PartFingerprints.write(_this._domNode, 4 /* OverlayWidgets */);
-        _this._domNode.setClassName('overlayWidgets');
-        return _this;
-    }
-    ViewOverlayWidgets.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
+import * as dom from '../../../../base/browser/dom.js';
+export class ViewOverlayWidgets extends ViewPart {
+    constructor(context, viewDomNode) {
+        super(context);
+        this._viewDomNode = viewDomNode;
+        const options = this._context.configuration.options;
+        const layoutInfo = options.get(146 /* EditorOption.layoutInfo */);
         this._widgets = {};
-    };
-    ViewOverlayWidgets.prototype.getDomNode = function () {
-        return this._domNode;
-    };
-    // ---- begin view event handlers
-    ViewOverlayWidgets.prototype.onConfigurationChanged = function (e) {
-        var options = this._context.configuration.options;
-        var layoutInfo = options.get(107 /* layoutInfo */);
         this._verticalScrollbarWidth = layoutInfo.verticalScrollbarWidth;
-        this._minimapWidth = layoutInfo.minimapWidth;
+        this._minimapWidth = layoutInfo.minimap.minimapWidth;
+        this._horizontalScrollbarHeight = layoutInfo.horizontalScrollbarHeight;
+        this._editorHeight = layoutInfo.height;
+        this._editorWidth = layoutInfo.width;
+        this._viewDomNodeRect = { top: 0, left: 0, width: 0, height: 0 };
+        this._domNode = createFastDomNode(document.createElement('div'));
+        PartFingerprints.write(this._domNode, 4 /* PartFingerprint.OverlayWidgets */);
+        this._domNode.setClassName('overlayWidgets');
+        this.overflowingOverlayWidgetsDomNode = createFastDomNode(document.createElement('div'));
+        PartFingerprints.write(this.overflowingOverlayWidgetsDomNode, 5 /* PartFingerprint.OverflowingOverlayWidgets */);
+        this.overflowingOverlayWidgetsDomNode.setClassName('overflowingOverlayWidgets');
+    }
+    dispose() {
+        super.dispose();
+        this._widgets = {};
+    }
+    getDomNode() {
+        return this._domNode;
+    }
+    // ---- begin view event handlers
+    onConfigurationChanged(e) {
+        const options = this._context.configuration.options;
+        const layoutInfo = options.get(146 /* EditorOption.layoutInfo */);
+        this._verticalScrollbarWidth = layoutInfo.verticalScrollbarWidth;
+        this._minimapWidth = layoutInfo.minimap.minimapWidth;
         this._horizontalScrollbarHeight = layoutInfo.horizontalScrollbarHeight;
         this._editorHeight = layoutInfo.height;
         this._editorWidth = layoutInfo.width;
         return true;
-    };
+    }
     // ---- end view event handlers
-    ViewOverlayWidgets.prototype.addWidget = function (widget) {
-        var domNode = createFastDomNode(widget.getDomNode());
+    addWidget(widget) {
+        const domNode = createFastDomNode(widget.getDomNode());
         this._widgets[widget.getId()] = {
             widget: widget,
             preference: null,
@@ -64,59 +55,114 @@ var ViewOverlayWidgets = /** @class */ (function (_super) {
         // This is sync because a widget wants to be in the dom
         domNode.setPosition('absolute');
         domNode.setAttribute('widgetId', widget.getId());
-        this._domNode.appendChild(domNode);
+        if (widget.allowEditorOverflow) {
+            this.overflowingOverlayWidgetsDomNode.appendChild(domNode);
+        }
+        else {
+            this._domNode.appendChild(domNode);
+        }
         this.setShouldRender();
-    };
-    ViewOverlayWidgets.prototype.setWidgetPosition = function (widget, preference) {
-        var widgetData = this._widgets[widget.getId()];
-        if (widgetData.preference === preference) {
+        this._updateMaxMinWidth();
+    }
+    setWidgetPosition(widget, position) {
+        const widgetData = this._widgets[widget.getId()];
+        const preference = position ? position.preference : null;
+        const stack = position?.stackOridinal;
+        if (widgetData.preference === preference && widgetData.stack === stack) {
+            this._updateMaxMinWidth();
             return false;
         }
         widgetData.preference = preference;
+        widgetData.stack = stack;
         this.setShouldRender();
+        this._updateMaxMinWidth();
         return true;
-    };
-    ViewOverlayWidgets.prototype.removeWidget = function (widget) {
-        var widgetId = widget.getId();
+    }
+    removeWidget(widget) {
+        const widgetId = widget.getId();
         if (this._widgets.hasOwnProperty(widgetId)) {
-            var widgetData = this._widgets[widgetId];
-            var domNode = widgetData.domNode.domNode;
+            const widgetData = this._widgets[widgetId];
+            const domNode = widgetData.domNode.domNode;
             delete this._widgets[widgetId];
-            domNode.parentNode.removeChild(domNode);
+            domNode.remove();
             this.setShouldRender();
+            this._updateMaxMinWidth();
         }
-    };
-    ViewOverlayWidgets.prototype._renderWidget = function (widgetData) {
-        var domNode = widgetData.domNode;
+    }
+    _updateMaxMinWidth() {
+        let maxMinWidth = 0;
+        const keys = Object.keys(this._widgets);
+        for (let i = 0, len = keys.length; i < len; i++) {
+            const widgetId = keys[i];
+            const widget = this._widgets[widgetId];
+            const widgetMinWidthInPx = widget.widget.getMinContentWidthInPx?.();
+            if (typeof widgetMinWidthInPx !== 'undefined') {
+                maxMinWidth = Math.max(maxMinWidth, widgetMinWidthInPx);
+            }
+        }
+        this._context.viewLayout.setOverlayWidgetsMinWidth(maxMinWidth);
+    }
+    _renderWidget(widgetData, stackCoordinates) {
+        const domNode = widgetData.domNode;
         if (widgetData.preference === null) {
-            domNode.unsetTop();
+            domNode.setTop('');
             return;
         }
-        if (widgetData.preference === 0 /* TOP_RIGHT_CORNER */) {
-            domNode.setTop(0);
-            domNode.setRight((2 * this._verticalScrollbarWidth) + this._minimapWidth);
+        const maxRight = (2 * this._verticalScrollbarWidth) + this._minimapWidth;
+        if (widgetData.preference === 0 /* OverlayWidgetPositionPreference.TOP_RIGHT_CORNER */ || widgetData.preference === 1 /* OverlayWidgetPositionPreference.BOTTOM_RIGHT_CORNER */) {
+            if (widgetData.preference === 1 /* OverlayWidgetPositionPreference.BOTTOM_RIGHT_CORNER */) {
+                const widgetHeight = domNode.domNode.clientHeight;
+                domNode.setTop((this._editorHeight - widgetHeight - 2 * this._horizontalScrollbarHeight));
+            }
+            else {
+                domNode.setTop(0);
+            }
+            if (widgetData.stack !== undefined) {
+                domNode.setTop(stackCoordinates[widgetData.preference]);
+                stackCoordinates[widgetData.preference] += domNode.domNode.clientWidth;
+            }
+            else {
+                domNode.setRight(maxRight);
+            }
         }
-        else if (widgetData.preference === 1 /* BOTTOM_RIGHT_CORNER */) {
-            var widgetHeight = domNode.domNode.clientHeight;
-            domNode.setTop((this._editorHeight - widgetHeight - 2 * this._horizontalScrollbarHeight));
-            domNode.setRight((2 * this._verticalScrollbarWidth) + this._minimapWidth);
-        }
-        else if (widgetData.preference === 2 /* TOP_CENTER */) {
-            domNode.setTop(0);
+        else if (widgetData.preference === 2 /* OverlayWidgetPositionPreference.TOP_CENTER */) {
             domNode.domNode.style.right = '50%';
+            if (widgetData.stack !== undefined) {
+                domNode.setTop(stackCoordinates[2 /* OverlayWidgetPositionPreference.TOP_CENTER */]);
+                stackCoordinates[2 /* OverlayWidgetPositionPreference.TOP_CENTER */] += domNode.domNode.clientHeight;
+            }
+            else {
+                domNode.setTop(0);
+            }
         }
-    };
-    ViewOverlayWidgets.prototype.prepareRender = function (ctx) {
-        // Nothing to read
-    };
-    ViewOverlayWidgets.prototype.render = function (ctx) {
+        else {
+            const { top, left } = widgetData.preference;
+            const fixedOverflowWidgets = this._context.configuration.options.get(42 /* EditorOption.fixedOverflowWidgets */);
+            if (fixedOverflowWidgets && widgetData.widget.allowEditorOverflow) {
+                // top, left are computed relative to the editor and we need them relative to the page
+                const editorBoundingBox = this._viewDomNodeRect;
+                domNode.setTop(top + editorBoundingBox.top);
+                domNode.setLeft(left + editorBoundingBox.left);
+                domNode.setPosition('fixed');
+            }
+            else {
+                domNode.setTop(top);
+                domNode.setLeft(left);
+                domNode.setPosition('absolute');
+            }
+        }
+    }
+    prepareRender(ctx) {
+        this._viewDomNodeRect = dom.getDomNodePagePosition(this._viewDomNode.domNode);
+    }
+    render(ctx) {
         this._domNode.setWidth(this._editorWidth);
-        var keys = Object.keys(this._widgets);
-        for (var i = 0, len = keys.length; i < len; i++) {
-            var widgetId = keys[i];
-            this._renderWidget(this._widgets[widgetId]);
+        const keys = Object.keys(this._widgets);
+        const stackCoordinates = Array.from({ length: 2 /* OverlayWidgetPositionPreference.TOP_CENTER */ + 1 }, () => 0);
+        keys.sort((a, b) => (this._widgets[a].stack || 0) - (this._widgets[b].stack || 0));
+        for (let i = 0, len = keys.length; i < len; i++) {
+            const widgetId = keys[i];
+            this._renderWidget(this._widgets[widgetId], stackCoordinates);
         }
-    };
-    return ViewOverlayWidgets;
-}(ViewPart));
-export { ViewOverlayWidgets };
+    }
+}

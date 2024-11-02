@@ -84,26 +84,55 @@ str += "\n" + fs.readFileSync(__dirname + "/figma-extras.d.ts", "utf8")
 // fs.writeFileSync("build/lib.scripter.d.ts", str, "utf8")
 
 let js = `export const lib_dts = ${JSON.stringify(str)};`
-let scripterLibJsFile = monacoEditorDir + "/esm/vs/language/typescript/lib/scripter.js"
+let scripterLibJsFile = monacoEditorDir + "/esm/vs/language/typescript/scripter.js"
 console.log(`write ${scripterLibJsFile}`)
 fs.writeFileSync(scripterLibJsFile, js, "utf8")
 
+function ensurePatch(file, content, pattern, replace) {
+  if (content.match(pattern) === null) {
+    throw new Error(`Could not match pattern ${String(pattern)} in file ${file}`)
+  }
 
-patch("esm/vs/language/typescript/tsWorker.js", js => {
+  return content.replace(pattern, replace)
+}
+
+const tsWorkerFile = "esm/vs/language/typescript/ts.worker.js";
+
+patch(tsWorkerFile, js => {
   // ...
-  // - import { lib_dts, lib_es6_dts } from './lib/lib.js';
-  // + import { lib_dts, lib_dts as lib_es6_dts } from './lib/scripter.js';
+  // - var libFileMap = {};
+  // + import { lib_dts } from './scripter.js';
+  // + var libFileMap = {};
   // ...
-  js = js.replace(
-    /import[^\r\n]+lib_dts[^\r\n]+/m,
-    "import { lib_dts, lib_dts as lib_es6_dts } from './lib/scripter.js';"
+  js = ensurePatch(tsWorkerFile, js,
+    /var libFileMap = {};/m,
+    "import { lib_dts } from './scripter.js';\nvar libFileMap = {};"
   )
+
+  // ...
+  // - libFileMap["lib.d.ts"] = '..
+  // + libFileMap["lib.d.ts"] = lib_dts;
+  // ...
+  js = ensurePatch(tsWorkerFile, js,
+    /libFileMap\["lib.d.ts"\] = '[^\r\n]+/m,
+    'libFileMap["lib.d.ts"] = lib_dts;'
+  )
+
+  // ...
+  // - libFileMap["lib.es6.d.ts"] = '..
+  // + libFileMap["lib.es6.d.ts"] = lib_dts;
+  // ...
+  js = ensurePatch(tsWorkerFile, js,
+    /libFileMap\["lib.es6.d.ts"\] = '[^\r\n]+/m,
+    'libFileMap["lib.es6.d.ts"] = lib_dts;'
+  )
+
   // ...
   // - text = model.getValue();
   // + text = model.getValue() + "\nexport {};\n";
   // ...
   // This makes all files modules
-  js = js.replace(
+  js = ensurePatch(tsWorkerFile, js,
     /text\s*=\s*model\.getValue\(\)\s*;/,
     "text = model.getValue() + '\\nexport {};\\n';"
   )
@@ -139,7 +168,7 @@ monacoDts = monacoDts.replace(/declare\s+namespace\s+monaco\s*\{\n/gm, "")
 //
 // remove terminating "}"
 let i = monacoDts.lastIndexOf("}", monacoDts.indexOf("declare namespace"))
-monacoDts = monacoDts.substr(0, i) + monacoDts.substr(i+1)
+monacoDts = monacoDts.substr(0, i) + monacoDts.substr(i + 1)
 //
 // declare namespace monaco.editor {...} => declare namespace editor {...}
 // declare namespace monaco.languages.html {

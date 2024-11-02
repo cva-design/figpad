@@ -2,29 +2,16 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 import * as browser from '../../../../base/browser/browser.js';
 import { createFastDomNode } from '../../../../base/browser/fastDomNode.js';
 import * as platform from '../../../../base/common/platform.js';
 import { RangeUtil } from './rangeUtil.js';
-import { HorizontalRange, VisibleRanges } from '../../../common/view/renderingContext.js';
+import { FloatHorizontalRange, VisibleRanges } from '../../view/renderingContext.js';
 import { LineDecoration } from '../../../common/viewLayout/lineDecorations.js';
-import { CharacterMapping, RenderLineInput, renderViewLine, LineRange } from '../../../common/viewLayout/viewLineRenderer.js';
-import { HIGH_CONTRAST } from '../../../../platform/theme/common/themeService.js';
+import { RenderLineInput, renderViewLine, LineRange, DomPosition } from '../../../common/viewLayout/viewLineRenderer.js';
+import { isHighContrast } from '../../../../platform/theme/common/theme.js';
 import { EditorFontLigatures } from '../../../common/config/editorOptions.js';
-var canUseFastRenderedViewLine = (function () {
+const canUseFastRenderedViewLine = (function () {
     if (platform.isNative) {
         // In VSCode we know very well when the zoom level changes
         return true;
@@ -45,126 +32,112 @@ var canUseFastRenderedViewLine = (function () {
     }
     return true;
 })();
-var alwaysRenderInlineSelection = (browser.isEdgeOrIE);
-var DomReadingContext = /** @class */ (function () {
-    function DomReadingContext(domNode, endNode) {
-        this._domNode = domNode;
-        this._clientRectDeltaLeft = 0;
-        this._clientRectDeltaLeftRead = false;
-        this.endNode = endNode;
-    }
-    Object.defineProperty(DomReadingContext.prototype, "clientRectDeltaLeft", {
-        get: function () {
-            if (!this._clientRectDeltaLeftRead) {
-                this._clientRectDeltaLeftRead = true;
-                this._clientRectDeltaLeft = this._domNode.getBoundingClientRect().left;
-            }
-            return this._clientRectDeltaLeft;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    return DomReadingContext;
-}());
-export { DomReadingContext };
-var ViewLineOptions = /** @class */ (function () {
-    function ViewLineOptions(config, themeType) {
+let monospaceAssumptionsAreValid = true;
+export class ViewLineOptions {
+    constructor(config, themeType) {
         this.themeType = themeType;
-        var options = config.options;
-        var fontInfo = options.get(34 /* fontInfo */);
-        this.renderWhitespace = options.get(74 /* renderWhitespace */);
-        this.renderControlCharacters = options.get(69 /* renderControlCharacters */);
+        const options = config.options;
+        const fontInfo = options.get(50 /* EditorOption.fontInfo */);
+        const experimentalWhitespaceRendering = options.get(38 /* EditorOption.experimentalWhitespaceRendering */);
+        if (experimentalWhitespaceRendering === 'off') {
+            this.renderWhitespace = options.get(100 /* EditorOption.renderWhitespace */);
+        }
+        else {
+            // whitespace is rendered in a different layer
+            this.renderWhitespace = 'none';
+        }
+        this.renderControlCharacters = options.get(95 /* EditorOption.renderControlCharacters */);
         this.spaceWidth = fontInfo.spaceWidth;
         this.middotWidth = fontInfo.middotWidth;
+        this.wsmiddotWidth = fontInfo.wsmiddotWidth;
         this.useMonospaceOptimizations = (fontInfo.isMonospace
-            && !options.get(23 /* disableMonospaceOptimizations */));
+            && !options.get(33 /* EditorOption.disableMonospaceOptimizations */));
         this.canUseHalfwidthRightwardsArrow = fontInfo.canUseHalfwidthRightwardsArrow;
-        this.lineHeight = options.get(49 /* lineHeight */);
-        this.stopRenderingLineAfter = options.get(88 /* stopRenderingLineAfter */);
-        this.fontLigatures = options.get(35 /* fontLigatures */);
+        this.lineHeight = options.get(67 /* EditorOption.lineHeight */);
+        this.stopRenderingLineAfter = options.get(118 /* EditorOption.stopRenderingLineAfter */);
+        this.fontLigatures = options.get(51 /* EditorOption.fontLigatures */);
     }
-    ViewLineOptions.prototype.equals = function (other) {
+    equals(other) {
         return (this.themeType === other.themeType
             && this.renderWhitespace === other.renderWhitespace
             && this.renderControlCharacters === other.renderControlCharacters
             && this.spaceWidth === other.spaceWidth
             && this.middotWidth === other.middotWidth
+            && this.wsmiddotWidth === other.wsmiddotWidth
             && this.useMonospaceOptimizations === other.useMonospaceOptimizations
             && this.canUseHalfwidthRightwardsArrow === other.canUseHalfwidthRightwardsArrow
             && this.lineHeight === other.lineHeight
             && this.stopRenderingLineAfter === other.stopRenderingLineAfter
             && this.fontLigatures === other.fontLigatures);
-    };
-    return ViewLineOptions;
-}());
-export { ViewLineOptions };
-var ViewLine = /** @class */ (function () {
-    function ViewLine(options) {
+    }
+}
+export class ViewLine {
+    static { this.CLASS_NAME = 'view-line'; }
+    constructor(options) {
         this._options = options;
         this._isMaybeInvalid = true;
         this._renderedViewLine = null;
     }
     // --- begin IVisibleLineData
-    ViewLine.prototype.getDomNode = function () {
+    getDomNode() {
         if (this._renderedViewLine && this._renderedViewLine.domNode) {
             return this._renderedViewLine.domNode.domNode;
         }
         return null;
-    };
-    ViewLine.prototype.setDomNode = function (domNode) {
+    }
+    setDomNode(domNode) {
         if (this._renderedViewLine) {
             this._renderedViewLine.domNode = createFastDomNode(domNode);
         }
         else {
             throw new Error('I have no rendered view line to set the dom node to...');
         }
-    };
-    ViewLine.prototype.onContentChanged = function () {
+    }
+    onContentChanged() {
         this._isMaybeInvalid = true;
-    };
-    ViewLine.prototype.onTokensChanged = function () {
+    }
+    onTokensChanged() {
         this._isMaybeInvalid = true;
-    };
-    ViewLine.prototype.onDecorationsChanged = function () {
+    }
+    onDecorationsChanged() {
         this._isMaybeInvalid = true;
-    };
-    ViewLine.prototype.onOptionsChanged = function (newOptions) {
+    }
+    onOptionsChanged(newOptions) {
         this._isMaybeInvalid = true;
         this._options = newOptions;
-    };
-    ViewLine.prototype.onSelectionChanged = function () {
-        if (alwaysRenderInlineSelection || this._options.themeType === HIGH_CONTRAST || this._options.renderWhitespace === 'selection') {
+    }
+    onSelectionChanged() {
+        if (isHighContrast(this._options.themeType) || this._options.renderWhitespace === 'selection') {
             this._isMaybeInvalid = true;
             return true;
         }
         return false;
-    };
-    ViewLine.prototype.renderLine = function (lineNumber, deltaTop, viewportData, sb) {
+    }
+    renderLine(lineNumber, deltaTop, lineHeight, viewportData, sb) {
         if (this._isMaybeInvalid === false) {
             // it appears that nothing relevant has changed
             return false;
         }
         this._isMaybeInvalid = false;
-        var lineData = viewportData.getViewLineRenderingData(lineNumber);
-        var options = this._options;
-        var actualInlineDecorations = LineDecoration.filter(lineData.inlineDecorations, lineNumber, lineData.minColumn, lineData.maxColumn);
+        const lineData = viewportData.getViewLineRenderingData(lineNumber);
+        const options = this._options;
+        const actualInlineDecorations = LineDecoration.filter(lineData.inlineDecorations, lineNumber, lineData.minColumn, lineData.maxColumn);
         // Only send selection information when needed for rendering whitespace
-        var selectionsOnLine = null;
-        if (alwaysRenderInlineSelection || options.themeType === HIGH_CONTRAST || this._options.renderWhitespace === 'selection') {
-            var selections = viewportData.selections;
-            for (var _i = 0, selections_1 = selections; _i < selections_1.length; _i++) {
-                var selection = selections_1[_i];
+        let selectionsOnLine = null;
+        if (isHighContrast(options.themeType) || this._options.renderWhitespace === 'selection') {
+            const selections = viewportData.selections;
+            for (const selection of selections) {
                 if (selection.endLineNumber < lineNumber || selection.startLineNumber > lineNumber) {
                     // Selection does not intersect line
                     continue;
                 }
-                var startColumn = (selection.startLineNumber === lineNumber ? selection.startColumn : lineData.minColumn);
-                var endColumn = (selection.endLineNumber === lineNumber ? selection.endColumn : lineData.maxColumn);
+                const startColumn = (selection.startLineNumber === lineNumber ? selection.startColumn : lineData.minColumn);
+                const endColumn = (selection.endLineNumber === lineNumber ? selection.endColumn : lineData.maxColumn);
                 if (startColumn < endColumn) {
-                    if (this._options.renderWhitespace !== 'selection') {
-                        actualInlineDecorations.push(new LineDecoration(startColumn, endColumn, 'inline-selected-text', 0 /* Regular */));
+                    if (isHighContrast(options.themeType)) {
+                        actualInlineDecorations.push(new LineDecoration(startColumn, endColumn, 'inline-selected-text', 0 /* InlineDecorationType.Regular */));
                     }
-                    else {
+                    if (this._options.renderWhitespace === 'selection') {
                         if (!selectionsOnLine) {
                             selectionsOnLine = [];
                         }
@@ -173,72 +146,79 @@ var ViewLine = /** @class */ (function () {
                 }
             }
         }
-        var renderLineInput = new RenderLineInput(options.useMonospaceOptimizations, options.canUseHalfwidthRightwardsArrow, lineData.content, lineData.continuesWithWrappedLine, lineData.isBasicASCII, lineData.containsRTL, lineData.minColumn - 1, lineData.tokens, actualInlineDecorations, lineData.tabSize, lineData.startVisibleColumn, options.spaceWidth, options.middotWidth, options.stopRenderingLineAfter, options.renderWhitespace, options.renderControlCharacters, options.fontLigatures !== EditorFontLigatures.OFF, selectionsOnLine);
+        const renderLineInput = new RenderLineInput(options.useMonospaceOptimizations, options.canUseHalfwidthRightwardsArrow, lineData.content, lineData.continuesWithWrappedLine, lineData.isBasicASCII, lineData.containsRTL, lineData.minColumn - 1, lineData.tokens, actualInlineDecorations, lineData.tabSize, lineData.startVisibleColumn, options.spaceWidth, options.middotWidth, options.wsmiddotWidth, options.stopRenderingLineAfter, options.renderWhitespace, options.renderControlCharacters, options.fontLigatures !== EditorFontLigatures.OFF, selectionsOnLine);
         if (this._renderedViewLine && this._renderedViewLine.input.equals(renderLineInput)) {
             // no need to do anything, we have the same render input
             return false;
         }
-        sb.appendASCIIString('<div style="top:');
-        sb.appendASCIIString(String(deltaTop));
-        sb.appendASCIIString('px;height:');
-        sb.appendASCIIString(String(this._options.lineHeight));
-        sb.appendASCIIString('px;" class="');
-        sb.appendASCIIString(ViewLine.CLASS_NAME);
-        sb.appendASCIIString('">');
-        var output = renderViewLine(renderLineInput, sb);
-        sb.appendASCIIString('</div>');
-        var renderedViewLine = null;
-        if (canUseFastRenderedViewLine && lineData.isBasicASCII && options.useMonospaceOptimizations && output.containsForeignElements === 0 /* None */) {
-            if (lineData.content.length < 300 && renderLineInput.lineTokens.getCount() < 100) {
-                // Browser rounding errors have been observed in Chrome and IE, so using the fast
-                // view line only for short lines. Please test before removing the length check...
-                // ---
-                // Another rounding error has been observed on Linux in VSCode, where <span> width
-                // rounding errors add up to an observable large number...
-                // ---
-                // Also see another example of rounding errors on Windows in
-                // https://github.com/Microsoft/vscode/issues/33178
-                renderedViewLine = new FastRenderedViewLine(this._renderedViewLine ? this._renderedViewLine.domNode : null, renderLineInput, output.characterMapping);
-            }
+        sb.appendString('<div style="top:');
+        sb.appendString(String(deltaTop));
+        sb.appendString('px;height:');
+        sb.appendString(String(lineHeight));
+        sb.appendString('px;" class="');
+        sb.appendString(ViewLine.CLASS_NAME);
+        sb.appendString('">');
+        const output = renderViewLine(renderLineInput, sb);
+        sb.appendString('</div>');
+        let renderedViewLine = null;
+        if (monospaceAssumptionsAreValid && canUseFastRenderedViewLine && lineData.isBasicASCII && options.useMonospaceOptimizations && output.containsForeignElements === 0 /* ForeignElementType.None */) {
+            renderedViewLine = new FastRenderedViewLine(this._renderedViewLine ? this._renderedViewLine.domNode : null, renderLineInput, output.characterMapping);
         }
         if (!renderedViewLine) {
             renderedViewLine = createRenderedLine(this._renderedViewLine ? this._renderedViewLine.domNode : null, renderLineInput, output.characterMapping, output.containsRTL, output.containsForeignElements);
         }
         this._renderedViewLine = renderedViewLine;
         return true;
-    };
-    ViewLine.prototype.layoutLine = function (lineNumber, deltaTop) {
+    }
+    layoutLine(lineNumber, deltaTop, lineHeight) {
         if (this._renderedViewLine && this._renderedViewLine.domNode) {
             this._renderedViewLine.domNode.setTop(deltaTop);
-            this._renderedViewLine.domNode.setHeight(this._options.lineHeight);
+            this._renderedViewLine.domNode.setHeight(lineHeight);
         }
-    };
+    }
     // --- end IVisibleLineData
-    ViewLine.prototype.getWidth = function () {
+    getWidth(context) {
         if (!this._renderedViewLine) {
             return 0;
         }
-        return this._renderedViewLine.getWidth();
-    };
-    ViewLine.prototype.getWidthIsFast = function () {
+        return this._renderedViewLine.getWidth(context);
+    }
+    getWidthIsFast() {
         if (!this._renderedViewLine) {
             return true;
         }
         return this._renderedViewLine.getWidthIsFast();
-    };
-    ViewLine.prototype.getVisibleRangesForRange = function (startColumn, endColumn, context) {
+    }
+    needsMonospaceFontCheck() {
+        if (!this._renderedViewLine) {
+            return false;
+        }
+        return (this._renderedViewLine instanceof FastRenderedViewLine);
+    }
+    monospaceAssumptionsAreValid() {
+        if (!this._renderedViewLine) {
+            return monospaceAssumptionsAreValid;
+        }
+        if (this._renderedViewLine instanceof FastRenderedViewLine) {
+            return this._renderedViewLine.monospaceAssumptionsAreValid();
+        }
+        return monospaceAssumptionsAreValid;
+    }
+    onMonospaceAssumptionsInvalidated() {
+        if (this._renderedViewLine && this._renderedViewLine instanceof FastRenderedViewLine) {
+            this._renderedViewLine = this._renderedViewLine.toSlowRenderedLine();
+        }
+    }
+    getVisibleRangesForRange(lineNumber, startColumn, endColumn, context) {
         if (!this._renderedViewLine) {
             return null;
         }
-        startColumn = startColumn | 0; // @perf
-        endColumn = endColumn | 0; // @perf
         startColumn = Math.min(this._renderedViewLine.input.lineContent.length + 1, Math.max(1, startColumn));
         endColumn = Math.min(this._renderedViewLine.input.lineContent.length + 1, Math.max(1, endColumn));
-        var stopRenderingLineAfter = this._renderedViewLine.input.stopRenderingLineAfter | 0; // @perf
-        var outsideRenderedLine = false;
+        const stopRenderingLineAfter = this._renderedViewLine.input.stopRenderingLineAfter;
         if (stopRenderingLineAfter !== -1 && startColumn > stopRenderingLineAfter + 1 && endColumn > stopRenderingLineAfter + 1) {
             // This range is obviously not visible
-            outsideRenderedLine = true;
+            return new VisibleRanges(true, [new FloatHorizontalRange(this.getWidth(context), 0)]);
         }
         if (stopRenderingLineAfter !== -1 && startColumn > stopRenderingLineAfter + 1) {
             startColumn = stopRenderingLineAfter + 1;
@@ -246,68 +226,124 @@ var ViewLine = /** @class */ (function () {
         if (stopRenderingLineAfter !== -1 && endColumn > stopRenderingLineAfter + 1) {
             endColumn = stopRenderingLineAfter + 1;
         }
-        var horizontalRanges = this._renderedViewLine.getVisibleRangesForRange(startColumn, endColumn, context);
+        const horizontalRanges = this._renderedViewLine.getVisibleRangesForRange(lineNumber, startColumn, endColumn, context);
         if (horizontalRanges && horizontalRanges.length > 0) {
-            return new VisibleRanges(outsideRenderedLine, horizontalRanges);
+            return new VisibleRanges(false, horizontalRanges);
         }
         return null;
-    };
-    ViewLine.prototype.getColumnOfNodeOffset = function (lineNumber, spanNode, offset) {
+    }
+    getColumnOfNodeOffset(spanNode, offset) {
         if (!this._renderedViewLine) {
             return 1;
         }
-        return this._renderedViewLine.getColumnOfNodeOffset(lineNumber, spanNode, offset);
-    };
-    ViewLine.CLASS_NAME = 'view-line';
-    return ViewLine;
-}());
-export { ViewLine };
+        return this._renderedViewLine.getColumnOfNodeOffset(spanNode, offset);
+    }
+}
 /**
  * A rendered line which is guaranteed to contain only regular ASCII and is rendered with a monospace font.
  */
-var FastRenderedViewLine = /** @class */ (function () {
-    function FastRenderedViewLine(domNode, renderLineInput, characterMapping) {
+class FastRenderedViewLine {
+    constructor(domNode, renderLineInput, characterMapping) {
+        this._cachedWidth = -1;
         this.domNode = domNode;
         this.input = renderLineInput;
+        const keyColumnCount = Math.floor(renderLineInput.lineContent.length / 300 /* Constants.MaxMonospaceDistance */);
+        if (keyColumnCount > 0) {
+            this._keyColumnPixelOffsetCache = new Float32Array(keyColumnCount);
+            for (let i = 0; i < keyColumnCount; i++) {
+                this._keyColumnPixelOffsetCache[i] = -1;
+            }
+        }
+        else {
+            this._keyColumnPixelOffsetCache = null;
+        }
         this._characterMapping = characterMapping;
         this._charWidth = renderLineInput.spaceWidth;
     }
-    FastRenderedViewLine.prototype.getWidth = function () {
-        return this._getCharPosition(this._characterMapping.length);
-    };
-    FastRenderedViewLine.prototype.getWidthIsFast = function () {
-        return true;
-    };
-    FastRenderedViewLine.prototype.getVisibleRangesForRange = function (startColumn, endColumn, context) {
-        var startPosition = this._getCharPosition(startColumn);
-        var endPosition = this._getCharPosition(endColumn);
-        return [new HorizontalRange(startPosition, endPosition - startPosition)];
-    };
-    FastRenderedViewLine.prototype._getCharPosition = function (column) {
-        var charOffset = this._characterMapping.getAbsoluteOffsets();
-        if (charOffset.length === 0) {
-            // No characters on this line
-            return 0;
+    getWidth(context) {
+        if (!this.domNode || this.input.lineContent.length < 300 /* Constants.MaxMonospaceDistance */) {
+            const horizontalOffset = this._characterMapping.getHorizontalOffset(this._characterMapping.length);
+            return Math.round(this._charWidth * horizontalOffset);
         }
-        return Math.round(this._charWidth * charOffset[column - 1]);
-    };
-    FastRenderedViewLine.prototype.getColumnOfNodeOffset = function (lineNumber, spanNode, offset) {
-        var spanNodeTextContentLength = spanNode.textContent.length;
-        var spanIndex = -1;
-        while (spanNode) {
-            spanNode = spanNode.previousSibling;
-            spanIndex++;
+        if (this._cachedWidth === -1) {
+            this._cachedWidth = this._getReadingTarget(this.domNode).offsetWidth;
+            context?.markDidDomLayout();
         }
-        var charOffset = this._characterMapping.partDataToCharOffset(spanIndex, spanNodeTextContentLength, offset);
-        return charOffset + 1;
-    };
-    return FastRenderedViewLine;
-}());
+        return this._cachedWidth;
+    }
+    getWidthIsFast() {
+        return (this.input.lineContent.length < 300 /* Constants.MaxMonospaceDistance */) || this._cachedWidth !== -1;
+    }
+    monospaceAssumptionsAreValid() {
+        if (!this.domNode) {
+            return monospaceAssumptionsAreValid;
+        }
+        if (this.input.lineContent.length < 300 /* Constants.MaxMonospaceDistance */) {
+            const expectedWidth = this.getWidth(null);
+            const actualWidth = this.domNode.domNode.firstChild.offsetWidth;
+            if (Math.abs(expectedWidth - actualWidth) >= 2) {
+                // more than 2px off
+                console.warn(`monospace assumptions have been violated, therefore disabling monospace optimizations!`);
+                monospaceAssumptionsAreValid = false;
+            }
+        }
+        return monospaceAssumptionsAreValid;
+    }
+    toSlowRenderedLine() {
+        return createRenderedLine(this.domNode, this.input, this._characterMapping, false, 0 /* ForeignElementType.None */);
+    }
+    getVisibleRangesForRange(lineNumber, startColumn, endColumn, context) {
+        const startPosition = this._getColumnPixelOffset(lineNumber, startColumn, context);
+        const endPosition = this._getColumnPixelOffset(lineNumber, endColumn, context);
+        return [new FloatHorizontalRange(startPosition, endPosition - startPosition)];
+    }
+    _getColumnPixelOffset(lineNumber, column, context) {
+        if (column <= 300 /* Constants.MaxMonospaceDistance */) {
+            const horizontalOffset = this._characterMapping.getHorizontalOffset(column);
+            return this._charWidth * horizontalOffset;
+        }
+        const keyColumnOrdinal = Math.floor((column - 1) / 300 /* Constants.MaxMonospaceDistance */) - 1;
+        const keyColumn = (keyColumnOrdinal + 1) * 300 /* Constants.MaxMonospaceDistance */ + 1;
+        let keyColumnPixelOffset = -1;
+        if (this._keyColumnPixelOffsetCache) {
+            keyColumnPixelOffset = this._keyColumnPixelOffsetCache[keyColumnOrdinal];
+            if (keyColumnPixelOffset === -1) {
+                keyColumnPixelOffset = this._actualReadPixelOffset(lineNumber, keyColumn, context);
+                this._keyColumnPixelOffsetCache[keyColumnOrdinal] = keyColumnPixelOffset;
+            }
+        }
+        if (keyColumnPixelOffset === -1) {
+            // Could not read actual key column pixel offset
+            const horizontalOffset = this._characterMapping.getHorizontalOffset(column);
+            return this._charWidth * horizontalOffset;
+        }
+        const keyColumnHorizontalOffset = this._characterMapping.getHorizontalOffset(keyColumn);
+        const horizontalOffset = this._characterMapping.getHorizontalOffset(column);
+        return keyColumnPixelOffset + this._charWidth * (horizontalOffset - keyColumnHorizontalOffset);
+    }
+    _getReadingTarget(myDomNode) {
+        return myDomNode.domNode.firstChild;
+    }
+    _actualReadPixelOffset(lineNumber, column, context) {
+        if (!this.domNode) {
+            return -1;
+        }
+        const domPosition = this._characterMapping.getDomPosition(column);
+        const r = RangeUtil.readHorizontalRanges(this._getReadingTarget(this.domNode), domPosition.partIndex, domPosition.charIndex, domPosition.partIndex, domPosition.charIndex, context);
+        if (!r || r.length === 0) {
+            return -1;
+        }
+        return r[0].left;
+    }
+    getColumnOfNodeOffset(spanNode, offset) {
+        return getColumnOfNodeOffset(this._characterMapping, spanNode, offset);
+    }
+}
 /**
  * Every time we render a line, we save what we have rendered in an instance of this class.
  */
-var RenderedViewLine = /** @class */ (function () {
-    function RenderedViewLine(domNode, renderLineInput, characterMapping, containsRTL, containsForeignElements) {
+class RenderedViewLine {
+    constructor(domNode, renderLineInput, characterMapping, containsRTL, containsForeignElements) {
         this.domNode = domNode;
         this.input = renderLineInput;
         this._characterMapping = characterMapping;
@@ -316,87 +352,89 @@ var RenderedViewLine = /** @class */ (function () {
         this._cachedWidth = -1;
         this._pixelOffsetCache = null;
         if (!containsRTL || this._characterMapping.length === 0 /* the line is empty */) {
-            this._pixelOffsetCache = new Int32Array(Math.max(2, this._characterMapping.length + 1));
-            for (var column = 0, len = this._characterMapping.length; column <= len; column++) {
+            this._pixelOffsetCache = new Float32Array(Math.max(2, this._characterMapping.length + 1));
+            for (let column = 0, len = this._characterMapping.length; column <= len; column++) {
                 this._pixelOffsetCache[column] = -1;
             }
         }
     }
     // --- Reading from the DOM methods
-    RenderedViewLine.prototype._getReadingTarget = function (myDomNode) {
+    _getReadingTarget(myDomNode) {
         return myDomNode.domNode.firstChild;
-    };
+    }
     /**
      * Width of the line in pixels
      */
-    RenderedViewLine.prototype.getWidth = function () {
+    getWidth(context) {
         if (!this.domNode) {
             return 0;
         }
         if (this._cachedWidth === -1) {
             this._cachedWidth = this._getReadingTarget(this.domNode).offsetWidth;
+            context?.markDidDomLayout();
         }
         return this._cachedWidth;
-    };
-    RenderedViewLine.prototype.getWidthIsFast = function () {
+    }
+    getWidthIsFast() {
         if (this._cachedWidth === -1) {
             return false;
         }
         return true;
-    };
+    }
     /**
      * Visible ranges for a model range
      */
-    RenderedViewLine.prototype.getVisibleRangesForRange = function (startColumn, endColumn, context) {
+    getVisibleRangesForRange(lineNumber, startColumn, endColumn, context) {
         if (!this.domNode) {
             return null;
         }
         if (this._pixelOffsetCache !== null) {
             // the text is LTR
-            var startOffset = this._readPixelOffset(this.domNode, startColumn, context);
+            const startOffset = this._readPixelOffset(this.domNode, lineNumber, startColumn, context);
             if (startOffset === -1) {
                 return null;
             }
-            var endOffset = this._readPixelOffset(this.domNode, endColumn, context);
+            const endOffset = this._readPixelOffset(this.domNode, lineNumber, endColumn, context);
             if (endOffset === -1) {
                 return null;
             }
-            return [new HorizontalRange(startOffset, endOffset - startOffset)];
+            return [new FloatHorizontalRange(startOffset, endOffset - startOffset)];
         }
-        return this._readVisibleRangesForRange(this.domNode, startColumn, endColumn, context);
-    };
-    RenderedViewLine.prototype._readVisibleRangesForRange = function (domNode, startColumn, endColumn, context) {
+        return this._readVisibleRangesForRange(this.domNode, lineNumber, startColumn, endColumn, context);
+    }
+    _readVisibleRangesForRange(domNode, lineNumber, startColumn, endColumn, context) {
         if (startColumn === endColumn) {
-            var pixelOffset = this._readPixelOffset(domNode, startColumn, context);
+            const pixelOffset = this._readPixelOffset(domNode, lineNumber, startColumn, context);
             if (pixelOffset === -1) {
                 return null;
             }
             else {
-                return [new HorizontalRange(pixelOffset, 0)];
+                return [new FloatHorizontalRange(pixelOffset, 0)];
             }
         }
         else {
             return this._readRawVisibleRangesForRange(domNode, startColumn, endColumn, context);
         }
-    };
-    RenderedViewLine.prototype._readPixelOffset = function (domNode, column, context) {
+    }
+    _readPixelOffset(domNode, lineNumber, column, context) {
         if (this._characterMapping.length === 0) {
             // This line has no content
-            if (this._containsForeignElements === 0 /* None */) {
+            if (this._containsForeignElements === 0 /* ForeignElementType.None */) {
                 // We can assume the line is really empty
                 return 0;
             }
-            if (this._containsForeignElements === 2 /* After */) {
+            if (this._containsForeignElements === 2 /* ForeignElementType.After */) {
                 // We have foreign elements after the (empty) line
                 return 0;
             }
-            if (this._containsForeignElements === 1 /* Before */) {
+            if (this._containsForeignElements === 1 /* ForeignElementType.Before */) {
                 // We have foreign elements before the (empty) line
-                return this.getWidth();
+                return this.getWidth(context);
             }
             // We have foreign elements before & after the (empty) line
-            var readingTarget = this._getReadingTarget(domNode);
+            const readingTarget = this._getReadingTarget(domNode);
             if (readingTarget.firstChild) {
+                context.markDidDomLayout();
                 return readingTarget.firstChild.offsetWidth;
             }
             else {
@@ -405,73 +443,63 @@ var RenderedViewLine = /** @class */ (function () {
         }
         if (this._pixelOffsetCache !== null) {
             // the text is LTR
-            var cachedPixelOffset = this._pixelOffsetCache[column];
+            const cachedPixelOffset = this._pixelOffsetCache[column];
             if (cachedPixelOffset !== -1) {
                 return cachedPixelOffset;
             }
-            var result = this._actualReadPixelOffset(domNode, column, context);
+            const result = this._actualReadPixelOffset(domNode, lineNumber, column, context);
             this._pixelOffsetCache[column] = result;
             return result;
         }
-        return this._actualReadPixelOffset(domNode, column, context);
-    };
-    RenderedViewLine.prototype._actualReadPixelOffset = function (domNode, column, context) {
+        return this._actualReadPixelOffset(domNode, lineNumber, column, context);
+    }
+    _actualReadPixelOffset(domNode, lineNumber, column, context) {
         if (this._characterMapping.length === 0) {
             // This line has no content
-            var r_1 = RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), 0, 0, 0, 0, context.clientRectDeltaLeft, context.endNode);
-            if (!r_1 || r_1.length === 0) {
+            const r = RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), 0, 0, 0, 0, context);
+            if (!r || r.length === 0) {
                 return -1;
             }
-            return r_1[0].left;
+            return r[0].left;
         }
-        if (column === this._characterMapping.length && this._isWhitespaceOnly && this._containsForeignElements === 0 /* None */) {
+        if (column === this._characterMapping.length && this._isWhitespaceOnly && this._containsForeignElements === 0 /* ForeignElementType.None */) {
             // This branch helps in the case of whitespace only lines which have a width set
-            return this.getWidth();
+            return this.getWidth(context);
         }
-        var partData = this._characterMapping.charOffsetToPartData(column - 1);
-        var partIndex = CharacterMapping.getPartIndex(partData);
-        var charOffsetInPart = CharacterMapping.getCharIndex(partData);
-        var r = RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), partIndex, charOffsetInPart, partIndex, charOffsetInPart, context.clientRectDeltaLeft, context.endNode);
+        const domPosition = this._characterMapping.getDomPosition(column);
+        const r = RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), domPosition.partIndex, domPosition.charIndex, domPosition.partIndex, domPosition.charIndex, context);
         if (!r || r.length === 0) {
             return -1;
         }
-        return r[0].left;
-    };
-    RenderedViewLine.prototype._readRawVisibleRangesForRange = function (domNode, startColumn, endColumn, context) {
+        const result = r[0].left;
+        if (this.input.isBasicASCII) {
+            const horizontalOffset = this._characterMapping.getHorizontalOffset(column);
+            const expectedResult = Math.round(this.input.spaceWidth * horizontalOffset);
+            if (Math.abs(expectedResult - result) <= 1) {
+                return expectedResult;
+            }
+        }
+        return result;
+    }
+    _readRawVisibleRangesForRange(domNode, startColumn, endColumn, context) {
         if (startColumn === 1 && endColumn === this._characterMapping.length) {
             // This branch helps IE with bidi text & gives a performance boost to other browsers when reading visible ranges for an entire line
-            return [new HorizontalRange(0, this.getWidth())];
+            return [new FloatHorizontalRange(0, this.getWidth(context))];
         }
-        var startPartData = this._characterMapping.charOffsetToPartData(startColumn - 1);
-        var startPartIndex = CharacterMapping.getPartIndex(startPartData);
-        var startCharOffsetInPart = CharacterMapping.getCharIndex(startPartData);
-        var endPartData = this._characterMapping.charOffsetToPartData(endColumn - 1);
-        var endPartIndex = CharacterMapping.getPartIndex(endPartData);
-        var endCharOffsetInPart = CharacterMapping.getCharIndex(endPartData);
-        return RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), startPartIndex, startCharOffsetInPart, endPartIndex, endCharOffsetInPart, context.clientRectDeltaLeft, context.endNode);
-    };
+        const startDomPosition = this._characterMapping.getDomPosition(startColumn);
+        const endDomPosition = this._characterMapping.getDomPosition(endColumn);
+        return RangeUtil.readHorizontalRanges(this._getReadingTarget(domNode), startDomPosition.partIndex, startDomPosition.charIndex, endDomPosition.partIndex, endDomPosition.charIndex, context);
+    }
     /**
      * Returns the column for the text found at a specific offset inside a rendered dom node
      */
-    RenderedViewLine.prototype.getColumnOfNodeOffset = function (lineNumber, spanNode, offset) {
-        var spanNodeTextContentLength = spanNode.textContent.length;
-        var spanIndex = -1;
-        while (spanNode) {
-            spanNode = spanNode.previousSibling;
-            spanIndex++;
-        }
-        var charOffset = this._characterMapping.partDataToCharOffset(spanIndex, spanNodeTextContentLength, offset);
-        return charOffset + 1;
-    };
-    return RenderedViewLine;
-}());
-var WebKitRenderedViewLine = /** @class */ (function (_super) {
-    __extends(WebKitRenderedViewLine, _super);
-    function WebKitRenderedViewLine() {
-        return _super !== null && _super.apply(this, arguments) || this;
+    getColumnOfNodeOffset(spanNode, offset) {
+        return getColumnOfNodeOffset(this._characterMapping, spanNode, offset);
     }
-    WebKitRenderedViewLine.prototype._readVisibleRangesForRange = function (domNode, startColumn, endColumn, context) {
-        var output = _super.prototype._readVisibleRangesForRange.call(this, domNode, startColumn, endColumn, context);
+}
+class WebKitRenderedViewLine extends RenderedViewLine {
+    _readVisibleRangesForRange(domNode, lineNumber, startColumn, endColumn, context) {
+        const output = super._readVisibleRangesForRange(domNode, lineNumber, startColumn, endColumn, context);
         if (!output || output.length === 0 || startColumn === endColumn || (startColumn === 1 && endColumn === this._characterMapping.length)) {
             return output;
         }
@@ -480,9 +508,9 @@ var WebKitRenderedViewLine = /** @class */ (function (_super) {
         if (!this.input.containsRTL) {
             // This is an attempt to patch things up
             // Find position of last column
-            var endPixelOffset = this._readPixelOffset(domNode, endColumn, context);
+            const endPixelOffset = this._readPixelOffset(domNode, lineNumber, endColumn, context);
             if (endPixelOffset !== -1) {
-                var lastRange = output[output.length - 1];
+                const lastRange = output[output.length - 1];
                 if (lastRange.left < endPixelOffset) {
                     // Trim down the width of the last visible range to not go after the last column's position
                     lastRange.width = endPixelOffset - lastRange.left;
@@ -490,10 +518,9 @@ var WebKitRenderedViewLine = /** @class */ (function (_super) {
             }
         }
         return output;
-    };
-    return WebKitRenderedViewLine;
-}(RenderedViewLine));
-var createRenderedLine = (function () {
+    }
+}
+const createRenderedLine = (function () {
     if (browser.isWebKit) {
         return createWebKitRenderedLine;
     }
@@ -504,4 +531,13 @@ function createWebKitRenderedLine(domNode, renderLineInput, characterMapping, co
 }
 function createNormalRenderedLine(domNode, renderLineInput, characterMapping, containsRTL, containsForeignElements) {
     return new RenderedViewLine(domNode, renderLineInput, characterMapping, containsRTL, containsForeignElements);
+}
+export function getColumnOfNodeOffset(characterMapping, spanNode, offset) {
+    const spanNodeTextContentLength = spanNode.textContent.length;
+    let spanIndex = -1;
+    while (spanNode) {
+        spanNode = spanNode.previousSibling;
+        spanIndex++;
+    }
+    return characterMapping.getColumn(new DomPosition(spanIndex, offset), spanNodeTextContentLength);
 }

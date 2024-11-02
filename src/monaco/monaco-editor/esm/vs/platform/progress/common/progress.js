@@ -1,6 +1,18 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-export var IEditorProgressService = createDecorator('editorProgressService');
+export const IProgressService = createDecorator('progressService');
+export const emptyProgressRunner = Object.freeze({
+    total() { },
+    worked() { },
+    done() { }
+});
+export class Progress {
+    static { this.None = Object.freeze({ report() { } }); }
+    constructor(callback) {
+        this.callback = callback;
+    }
+    report(item) {
+        this._value = item;
+        this.callback(this._value);
+    }
+}
+export const IEditorProgressService = createDecorator('editorProgressService');

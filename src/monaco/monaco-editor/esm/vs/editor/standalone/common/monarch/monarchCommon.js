@@ -38,11 +38,11 @@ export function sanitize(s) {
  * Logs a message.
  */
 export function log(lexer, msg) {
-    console.log(lexer.languageId + ": " + msg);
+    console.log(`${lexer.languageId}: ${msg}`);
 }
 // Throwing errors
 export function createError(lexer, msg) {
-    return new Error(lexer.languageId + ": " + msg);
+    return new Error(`${lexer.languageId}: ${msg}`);
 }
 // Helper functions for rule finding and substitution
 /**
@@ -55,8 +55,8 @@ export function createError(lexer, msg) {
  * See documentation for more info
  */
 export function substituteMatches(lexer, str, id, matches, state) {
-    var re = /\$((\$)|(#)|(\d\d?)|[sS](\d\d?)|@(\w+))/g;
-    var stateMatches = null;
+    const re = /\$((\$)|(#)|(\d\d?)|[sS](\d\d?)|@(\w+))/g;
+    let stateMatches = null;
     return str.replace(re, function (full, sub, dollar, hash, n, s, attr, ofs, total) {
         if (!empty(dollar)) {
             return '$'; // $$
@@ -81,16 +81,35 @@ export function substituteMatches(lexer, str, id, matches, state) {
     });
 }
 /**
+ * substituteMatchesRe is used on lexer regex rules and can substitutes predefined patterns:
+ * 		$Sn => n'th part of state
+ *
+ */
+export function substituteMatchesRe(lexer, str, state) {
+    const re = /\$[sS](\d\d?)/g;
+    let stateMatches = null;
+    return str.replace(re, function (full, s) {
+        if (stateMatches === null) { // split state on demand
+            stateMatches = state.split('.');
+            stateMatches.unshift(state);
+        }
+        if (!empty(s) && s < stateMatches.length) {
+            return fixCase(lexer, stateMatches[s]); //$Sn
+        }
+        return '';
+    });
+}
+/**
  * Find the tokenizer rules for a specific state (i.e. next action)
  */
 export function findRules(lexer, inState) {
-    var state = inState;
+    let state = inState;
     while (state && state.length > 0) {
-        var rules = lexer.tokenizer[state];
+        const rules = lexer.tokenizer[state];
         if (rules) {
             return rules;
         }
-        var idx = state.lastIndexOf('.');
+        const idx = state.lastIndexOf('.');
         if (idx < 0) {
             state = null; // no further parent
         }
@@ -106,13 +125,13 @@ export function findRules(lexer, inState) {
  * but not yet whether the corresponding rules are correct.
  */
 export function stateExists(lexer, inState) {
-    var state = inState;
+    let state = inState;
     while (state && state.length > 0) {
-        var exist = lexer.stateNames[state];
+        const exist = lexer.stateNames[state];
         if (exist) {
             return true;
         }
-        var idx = state.lastIndexOf('.');
+        const idx = state.lastIndexOf('.');
         if (idx < 0) {
             state = null; // no further parent
         }

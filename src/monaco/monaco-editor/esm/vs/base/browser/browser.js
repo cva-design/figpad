@@ -2,57 +2,53 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Emitter } from '../common/event.js';
-var WindowManager = /** @class */ (function () {
-    function WindowManager() {
-        // --- Zoom Level
-        this._zoomLevel = 0;
-        this._lastZoomLevelChangeTime = 0;
-        this._onDidChangeZoomLevel = new Emitter();
-        this.onDidChangeZoomLevel = this._onDidChangeZoomLevel.event;
+import { mainWindow } from './window.js';
+class WindowManager {
+    constructor() {
+        // --- Zoom Factor
+        this.mapWindowIdToZoomFactor = new Map();
     }
-    WindowManager.prototype.getZoomLevel = function () {
-        return this._zoomLevel;
-    };
-    WindowManager.prototype.getTimeSinceLastZoomLevelChanged = function () {
-        return Date.now() - this._lastZoomLevelChangeTime;
-    };
-    // --- Pixel Ratio
-    WindowManager.prototype.getPixelRatio = function () {
-        var ctx = document.createElement('canvas').getContext('2d');
-        var dpr = window.devicePixelRatio || 1;
-        var bsr = ctx.webkitBackingStorePixelRatio ||
-            ctx.mozBackingStorePixelRatio ||
-            ctx.msBackingStorePixelRatio ||
-            ctx.oBackingStorePixelRatio ||
-            ctx.backingStorePixelRatio || 1;
-        return dpr / bsr;
-    };
-    WindowManager.INSTANCE = new WindowManager();
-    return WindowManager;
-}());
-export function getZoomLevel() {
-    return WindowManager.INSTANCE.getZoomLevel();
+    static { this.INSTANCE = new WindowManager(); }
+    getZoomFactor(targetWindow) {
+        return this.mapWindowIdToZoomFactor.get(this.getWindowId(targetWindow)) ?? 1;
+    }
+    getWindowId(targetWindow) {
+        return targetWindow.vscodeWindowId;
+    }
 }
-/** Returns the time (in ms) since the zoom level was changed */
-export function getTimeSinceLastZoomLevelChanged() {
-    return WindowManager.INSTANCE.getTimeSinceLastZoomLevelChanged();
+export function addMatchMediaChangeListener(targetWindow, query, callback) {
+    if (typeof query === 'string') {
+        query = targetWindow.matchMedia(query);
+    }
+    query.addEventListener('change', callback);
 }
-export function onDidChangeZoomLevel(callback) {
-    return WindowManager.INSTANCE.onDidChangeZoomLevel(callback);
+/** The zoom scale for an index, e.g. 1, 1.2, 1.4 */
+export function getZoomFactor(targetWindow) {
+    return WindowManager.INSTANCE.getZoomFactor(targetWindow);
 }
-export function getPixelRatio() {
-    return WindowManager.INSTANCE.getPixelRatio();
+const userAgent = navigator.userAgent;
+export const isFirefox = (userAgent.indexOf('Firefox') >= 0);
+export const isWebKit = (userAgent.indexOf('AppleWebKit') >= 0);
+export const isChrome = (userAgent.indexOf('Chrome') >= 0);
+export const isSafari = (!isChrome && (userAgent.indexOf('Safari') >= 0));
+export const isWebkitWebView = (!isChrome && !isSafari && isWebKit);
+export const isElectron = (userAgent.indexOf('Electron/') >= 0);
+export const isAndroid = (userAgent.indexOf('Android') >= 0);
+let standalone = false;
+if (typeof mainWindow.matchMedia === 'function') {
+    const standaloneMatchMedia = mainWindow.matchMedia('(display-mode: standalone) or (display-mode: window-controls-overlay)');
+    const fullScreenMatchMedia = mainWindow.matchMedia('(display-mode: fullscreen)');
+    standalone = standaloneMatchMedia.matches;
+    addMatchMediaChangeListener(mainWindow, standaloneMatchMedia, ({ matches }) => {
+        // entering fullscreen would change standaloneMatchMedia.matches to false
+        // if standalone is true (running as PWA) and entering fullscreen, skip this change
+        if (standalone && fullScreenMatchMedia.matches) {
+            return;
+        }
+        // otherwise update standalone (browser to PWA or PWA to browser)
+        standalone = matches;
+    });
 }
-var userAgent = navigator.userAgent;
-export var isIE = (userAgent.indexOf('Trident') >= 0);
-export var isEdge = (userAgent.indexOf('Edge/') >= 0);
-export var isEdgeOrIE = isIE || isEdge;
-export var isFirefox = (userAgent.indexOf('Firefox') >= 0);
-export var isWebKit = (userAgent.indexOf('AppleWebKit') >= 0);
-export var isChrome = (userAgent.indexOf('Chrome') >= 0);
-export var isSafari = (!isChrome && (userAgent.indexOf('Safari') >= 0));
-export var isWebkitWebView = (!isChrome && !isSafari && isWebKit);
-export var isIPad = (userAgent.indexOf('iPad') >= 0 || (isSafari && navigator.maxTouchPoints > 0));
-export var isEdgeWebView = isEdge && (userAgent.indexOf('WebView/') >= 0);
-export var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+export function isStandalone() {
+    return standalone;
+}

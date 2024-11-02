@@ -2,24 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 import * as browser from './browser.js';
 import { IframeUtils } from './iframe.js';
 import * as platform from '../common/platform.js';
-var StandardMouseEvent = /** @class */ (function () {
-    function StandardMouseEvent(e) {
+export class StandardMouseEvent {
+    constructor(targetWindow, e) {
         this.timestamp = Date.now();
         this.browserEvent = e;
         this.leftButton = e.button === 0;
@@ -41,52 +28,49 @@ var StandardMouseEvent = /** @class */ (function () {
         }
         else {
             // Probably hit by MSGestureEvent
-            this.posx = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
-            this.posy = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+            this.posx = e.clientX + this.target.ownerDocument.body.scrollLeft + this.target.ownerDocument.documentElement.scrollLeft;
+            this.posy = e.clientY + this.target.ownerDocument.body.scrollTop + this.target.ownerDocument.documentElement.scrollTop;
         }
         // Find the position of the iframe this code is executing in relative to the iframe where the event was captured.
-        var iframeOffsets = IframeUtils.getPositionOfChildWindowRelativeToAncestorWindow(self, e.view);
+        const iframeOffsets = IframeUtils.getPositionOfChildWindowRelativeToAncestorWindow(targetWindow, e.view);
         this.posx -= iframeOffsets.left;
         this.posy -= iframeOffsets.top;
     }
-    StandardMouseEvent.prototype.preventDefault = function () {
-        if (this.browserEvent.preventDefault) {
-            this.browserEvent.preventDefault();
-        }
-    };
-    StandardMouseEvent.prototype.stopPropagation = function () {
-        if (this.browserEvent.stopPropagation) {
-            this.browserEvent.stopPropagation();
-        }
-    };
-    return StandardMouseEvent;
-}());
-export { StandardMouseEvent };
-var DragMouseEvent = /** @class */ (function (_super) {
-    __extends(DragMouseEvent, _super);
-    function DragMouseEvent(e) {
-        var _this = _super.call(this, e) || this;
-        _this.dataTransfer = e.dataTransfer;
-        return _this;
+    preventDefault() {
+        this.browserEvent.preventDefault();
     }
-    return DragMouseEvent;
-}(StandardMouseEvent));
-export { DragMouseEvent };
-var StandardWheelEvent = /** @class */ (function () {
-    function StandardWheelEvent(e, deltaX, deltaY) {
-        if (deltaX === void 0) { deltaX = 0; }
-        if (deltaY === void 0) { deltaY = 0; }
+    stopPropagation() {
+        this.browserEvent.stopPropagation();
+    }
+}
+export class StandardWheelEvent {
+    constructor(e, deltaX = 0, deltaY = 0) {
         this.browserEvent = e || null;
         this.target = e ? (e.target || e.targetNode || e.srcElement) : null;
         this.deltaY = deltaY;
         this.deltaX = deltaX;
+        let shouldFactorDPR = false;
+        if (browser.isChrome) {
+            // Chrome version >= 123 contains the fix to factor devicePixelRatio into the wheel event.
+            // See https://chromium.googlesource.com/chromium/src.git/+/be51b448441ff0c9d1f17e0f25c4bf1ab3f11f61
+            const chromeVersionMatch = navigator.userAgent.match(/Chrome\/(\d+)/);
+            const chromeMajorVersion = chromeVersionMatch ? parseInt(chromeVersionMatch[1]) : 123;
+            shouldFactorDPR = chromeMajorVersion <= 122;
+        }
         if (e) {
             // Old (deprecated) wheel events
-            var e1 = e;
-            var e2 = e;
+            const e1 = e;
+            const e2 = e;
+            const devicePixelRatio = e.view?.devicePixelRatio || 1;
             // vertical delta scroll
             if (typeof e1.wheelDeltaY !== 'undefined') {
-                this.deltaY = e1.wheelDeltaY / 120;
+                if (shouldFactorDPR) {
+                    // Refs https://github.com/microsoft/vscode/issues/146403#issuecomment-1854538928
+                    this.deltaY = e1.wheelDeltaY / (120 * devicePixelRatio);
+                }
+                else {
+                    this.deltaY = e1.wheelDeltaY / 120;
+                }
             }
             else if (typeof e2.VERTICAL_AXIS !== 'undefined' && e2.axis === e2.VERTICAL_AXIS) {
                 this.deltaY = -e2.detail / 3;
@@ -94,10 +78,15 @@ var StandardWheelEvent = /** @class */ (function () {
             else if (e.type === 'wheel') {
                 // Modern wheel event
                 // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
-                var ev = e;
+                const ev = e;
                 if (ev.deltaMode === ev.DOM_DELTA_LINE) {
                     // the deltas are expressed in lines
-                    this.deltaY = -e.deltaY;
+                    if (browser.isFirefox && !platform.isMacintosh) {
+                        this.deltaY = -e.deltaY / 3;
+                    }
+                    else {
+                        this.deltaY = -e.deltaY;
+                    }
                 }
                 else {
                     this.deltaY = -e.deltaY / 40;
@@ -107,6 +96,10 @@ var StandardWheelEvent = /** @class */ (function () {
             if (typeof e1.wheelDeltaX !== 'undefined') {
                 if (browser.isSafari && platform.isWindows) {
                     this.deltaX = -(e1.wheelDeltaX / 120);
+                }
+                else if (shouldFactorDPR) {
+                    // Refs https://github.com/microsoft/vscode/issues/146403#issuecomment-1854538928
+                    this.deltaX = e1.wheelDeltaX / (120 * devicePixelRatio);
                 }
                 else {
                     this.deltaX = e1.wheelDeltaX / 120;
@@ -118,10 +111,15 @@ var StandardWheelEvent = /** @class */ (function () {
             else if (e.type === 'wheel') {
                 // Modern wheel event
                 // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
-                var ev = e;
+                const ev = e;
                 if (ev.deltaMode === ev.DOM_DELTA_LINE) {
                     // the deltas are expressed in lines
-                    this.deltaX = -e.deltaX;
+                    if (browser.isFirefox && !platform.isMacintosh) {
+                        this.deltaX = -e.deltaX / 3;
+                    }
+                    else {
+                        this.deltaX = -e.deltaX;
+                    }
                 }
                 else {
                     this.deltaX = -e.deltaX / 40;
@@ -129,24 +127,20 @@ var StandardWheelEvent = /** @class */ (function () {
             }
             // Assume a vertical scroll if nothing else worked
             if (this.deltaY === 0 && this.deltaX === 0 && e.wheelDelta) {
-                this.deltaY = e.wheelDelta / 120;
+                if (shouldFactorDPR) {
+                    // Refs https://github.com/microsoft/vscode/issues/146403#issuecomment-1854538928
+                    this.deltaY = e.wheelDelta / (120 * devicePixelRatio);
+                }
+                else {
+                    this.deltaY = e.wheelDelta / 120;
+                }
             }
         }
     }
-    StandardWheelEvent.prototype.preventDefault = function () {
-        if (this.browserEvent) {
-            if (this.browserEvent.preventDefault) {
-                this.browserEvent.preventDefault();
-            }
-        }
-    };
-    StandardWheelEvent.prototype.stopPropagation = function () {
-        if (this.browserEvent) {
-            if (this.browserEvent.stopPropagation) {
-                this.browserEvent.stopPropagation();
-            }
-        }
-    };
-    return StandardWheelEvent;
-}());
-export { StandardWheelEvent };
+    preventDefault() {
+        this.browserEvent?.preventDefault();
+    }
+    stopPropagation() {
+        this.browserEvent?.stopPropagation();
+    }
+}

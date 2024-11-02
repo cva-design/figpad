@@ -1,51 +1,63 @@
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-import { createDecorator } from '../../instantiation/common/instantiation.js';
-import { toDisposable } from '../../../base/common/lifecycle.js';
-import * as platform from '../../registry/common/platform.js';
 import { Emitter } from '../../../base/common/event.js';
-export var IThemeService = createDecorator('themeService');
+import { Disposable, toDisposable } from '../../../base/common/lifecycle.js';
+import { createDecorator } from '../../instantiation/common/instantiation.js';
+import * as platform from '../../registry/common/platform.js';
+import { ColorScheme } from './theme.js';
+export const IThemeService = createDecorator('themeService');
 export function themeColorFromId(id) {
-    return { id: id };
+    return { id };
 }
-// base themes
-export var DARK = 'dark';
-export var HIGH_CONTRAST = 'hc';
 export function getThemeTypeSelector(type) {
     switch (type) {
-        case DARK: return 'vs-dark';
-        case HIGH_CONTRAST: return 'hc-black';
+        case ColorScheme.DARK: return 'vs-dark';
+        case ColorScheme.HIGH_CONTRAST_DARK: return 'hc-black';
+        case ColorScheme.HIGH_CONTRAST_LIGHT: return 'hc-light';
         default: return 'vs';
     }
 }
 // static theming participant
-export var Extensions = {
+export const Extensions = {
     ThemingContribution: 'base.contributions.theming'
 };
-var ThemingRegistry = /** @class */ (function () {
-    function ThemingRegistry() {
+class ThemingRegistry {
+    constructor() {
         this.themingParticipants = [];
         this.themingParticipants = [];
         this.onThemingParticipantAddedEmitter = new Emitter();
     }
-    ThemingRegistry.prototype.onThemeChange = function (participant) {
-        var _this = this;
+    onColorThemeChange(participant) {
         this.themingParticipants.push(participant);
         this.onThemingParticipantAddedEmitter.fire(participant);
-        return toDisposable(function () {
-            var idx = _this.themingParticipants.indexOf(participant);
-            _this.themingParticipants.splice(idx, 1);
+        return toDisposable(() => {
+            const idx = this.themingParticipants.indexOf(participant);
+            this.themingParticipants.splice(idx, 1);
         });
-    };
-    ThemingRegistry.prototype.getThemingParticipants = function () {
+    }
+    getThemingParticipants() {
         return this.themingParticipants;
-    };
-    return ThemingRegistry;
-}());
-var themingRegistry = new ThemingRegistry();
+    }
+}
+const themingRegistry = new ThemingRegistry();
 platform.Registry.add(Extensions.ThemingContribution, themingRegistry);
 export function registerThemingParticipant(participant) {
-    return themingRegistry.onThemeChange(participant);
+    return themingRegistry.onColorThemeChange(participant);
+}
+/**
+ * Utility base class for all themable components.
+ */
+export class Themable extends Disposable {
+    constructor(themeService) {
+        super();
+        this.themeService = themeService;
+        this.theme = themeService.getColorTheme();
+        // Hook up to theme changes
+        this._register(this.themeService.onDidColorThemeChange(theme => this.onThemeChange(theme)));
+    }
+    onThemeChange(theme) {
+        this.theme = theme;
+        this.updateStyles();
+    }
+    updateStyles() {
+        // Subclasses to override
+    }
 }

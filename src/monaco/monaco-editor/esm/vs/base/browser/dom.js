@@ -2,226 +2,101 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-var __spreadArrays = (this && this.__spreadArrays) || function () {
-    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
-    for (var r = Array(s), k = 0, i = 0; i < il; i++)
-        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
-            r[k] = a[j];
-    return r;
-};
 import * as browser from './browser.js';
-import { domEvent } from './event.js';
+import { BrowserFeatures } from './canIUse.js';
 import { StandardKeyboardEvent } from './keyboardEvent.js';
 import { StandardMouseEvent } from './mouseEvent.js';
-import { TimeoutTimer } from '../common/async.js';
+import { AbstractIdleValue, IntervalTimer, _runWhenIdle } from '../common/async.js';
 import { onUnexpectedError } from '../common/errors.js';
-import { Emitter } from '../common/event.js';
-import { Disposable, toDisposable } from '../common/lifecycle.js';
+import * as event from '../common/event.js';
+import * as dompurify from './dompurify/dompurify.js';
+import { Disposable, DisposableStore, toDisposable } from '../common/lifecycle.js';
+import { FileAccess, RemoteAuthorities } from '../common/network.js';
 import * as platform from '../common/platform.js';
-import { coalesce } from '../common/arrays.js';
-import { Schemas, RemoteAuthorities } from '../common/network.js';
-import { BrowserFeatures } from './canIUse.js';
+import { hash } from '../common/hash.js';
+import { ensureCodeWindow, mainWindow } from './window.js';
+//# region Multi-Window Support Utilities
+export const { registerWindow, getWindow, getDocument, getWindows, getWindowsCount, getWindowId, getWindowById, hasWindow, onDidRegisterWindow, onWillUnregisterWindow, onDidUnregisterWindow } = (function () {
+    const windows = new Map();
+    ensureCodeWindow(mainWindow, 1);
+    const mainWindowRegistration = { window: mainWindow, disposables: new DisposableStore() };
+    windows.set(mainWindow.vscodeWindowId, mainWindowRegistration);
+    const onDidRegisterWindow = new event.Emitter();
+    const onDidUnregisterWindow = new event.Emitter();
+    const onWillUnregisterWindow = new event.Emitter();
+    function getWindowById(windowId, fallbackToMain) {
+        const window = typeof windowId === 'number' ? windows.get(windowId) : undefined;
+        return window ?? (fallbackToMain ? mainWindowRegistration : undefined);
+    }
+    return {
+        onDidRegisterWindow: onDidRegisterWindow.event,
+        onWillUnregisterWindow: onWillUnregisterWindow.event,
+        onDidUnregisterWindow: onDidUnregisterWindow.event,
+        registerWindow(window) {
+            if (windows.has(window.vscodeWindowId)) {
+                return Disposable.None;
+            }
+            const disposables = new DisposableStore();
+            const registeredWindow = {
+                window,
+                disposables: disposables.add(new DisposableStore())
+            };
+            windows.set(window.vscodeWindowId, registeredWindow);
+            disposables.add(toDisposable(() => {
+                windows.delete(window.vscodeWindowId);
+                onDidUnregisterWindow.fire(window);
+            }));
+            disposables.add(addDisposableListener(window, EventType.BEFORE_UNLOAD, () => {
+                onWillUnregisterWindow.fire(window);
+            }));
+            onDidRegisterWindow.fire(registeredWindow);
+            return disposables;
+        },
+        getWindows() {
+            return windows.values();
+        },
+        getWindowsCount() {
+            return windows.size;
+        },
+        getWindowId(targetWindow) {
+            return targetWindow.vscodeWindowId;
+        },
+        hasWindow(windowId) {
+            return windows.has(windowId);
+        },
+        getWindowById,
+        getWindow(e) {
+            const candidateNode = e;
+            if (candidateNode?.ownerDocument?.defaultView) {
+                return candidateNode.ownerDocument.defaultView.window;
+            }
+            const candidateEvent = e;
+            if (candidateEvent?.view) {
+                return candidateEvent.view.window;
+            }
+            return mainWindow;
+        },
+        getDocument(e) {
+            const candidateNode = e;
+            return getWindow(candidateNode).document;
+        }
+    };
+})();
+//#endregion
 export function clearNode(node) {
     while (node.firstChild) {
-        node.removeChild(node.firstChild);
+        node.firstChild.remove();
     }
 }
-export function removeNode(node) {
-    if (node.parentNode) {
-        node.parentNode.removeChild(node);
-    }
-}
-export function isInDOM(node) {
-    while (node) {
-        if (node === document.body) {
-            return true;
-        }
-        node = node.parentNode || node.host;
-    }
-    return false;
-}
-var _manualClassList = new /** @class */ (function () {
-    function class_1() {
-        this._lastStart = -1;
-        this._lastEnd = -1;
-    }
-    class_1.prototype._findClassName = function (node, className) {
-        var classes = node.className;
-        if (!classes) {
-            this._lastStart = -1;
-            return;
-        }
-        className = className.trim();
-        var classesLen = classes.length, classLen = className.length;
-        if (classLen === 0) {
-            this._lastStart = -1;
-            return;
-        }
-        if (classesLen < classLen) {
-            this._lastStart = -1;
-            return;
-        }
-        if (classes === className) {
-            this._lastStart = 0;
-            this._lastEnd = classesLen;
-            return;
-        }
-        var idx = -1, idxEnd;
-        while ((idx = classes.indexOf(className, idx + 1)) >= 0) {
-            idxEnd = idx + classLen;
-            // a class that is followed by another class
-            if ((idx === 0 || classes.charCodeAt(idx - 1) === 32 /* Space */) && classes.charCodeAt(idxEnd) === 32 /* Space */) {
-                this._lastStart = idx;
-                this._lastEnd = idxEnd + 1;
-                return;
-            }
-            // last class
-            if (idx > 0 && classes.charCodeAt(idx - 1) === 32 /* Space */ && idxEnd === classesLen) {
-                this._lastStart = idx - 1;
-                this._lastEnd = idxEnd;
-                return;
-            }
-            // equal - duplicate of cmp above
-            if (idx === 0 && idxEnd === classesLen) {
-                this._lastStart = 0;
-                this._lastEnd = idxEnd;
-                return;
-            }
-        }
-        this._lastStart = -1;
-    };
-    class_1.prototype.hasClass = function (node, className) {
-        this._findClassName(node, className);
-        return this._lastStart !== -1;
-    };
-    class_1.prototype.addClasses = function (node) {
-        var _this = this;
-        var classNames = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            classNames[_i - 1] = arguments[_i];
-        }
-        classNames.forEach(function (nameValue) { return nameValue.split(' ').forEach(function (name) { return _this.addClass(node, name); }); });
-    };
-    class_1.prototype.addClass = function (node, className) {
-        if (!node.className) { // doesn't have it for sure
-            node.className = className;
-        }
-        else {
-            this._findClassName(node, className); // see if it's already there
-            if (this._lastStart === -1) {
-                node.className = node.className + ' ' + className;
-            }
-        }
-    };
-    class_1.prototype.removeClass = function (node, className) {
-        this._findClassName(node, className);
-        if (this._lastStart === -1) {
-            return; // Prevent styles invalidation if not necessary
-        }
-        else {
-            node.className = node.className.substring(0, this._lastStart) + node.className.substring(this._lastEnd);
-        }
-    };
-    class_1.prototype.removeClasses = function (node) {
-        var _this = this;
-        var classNames = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            classNames[_i - 1] = arguments[_i];
-        }
-        classNames.forEach(function (nameValue) { return nameValue.split(' ').forEach(function (name) { return _this.removeClass(node, name); }); });
-    };
-    class_1.prototype.toggleClass = function (node, className, shouldHaveIt) {
-        this._findClassName(node, className);
-        if (this._lastStart !== -1 && (shouldHaveIt === undefined || !shouldHaveIt)) {
-            this.removeClass(node, className);
-        }
-        if (this._lastStart === -1 && (shouldHaveIt === undefined || shouldHaveIt)) {
-            this.addClass(node, className);
-        }
-    };
-    return class_1;
-}());
-var _nativeClassList = new /** @class */ (function () {
-    function class_2() {
-    }
-    class_2.prototype.hasClass = function (node, className) {
-        return Boolean(className) && node.classList && node.classList.contains(className);
-    };
-    class_2.prototype.addClasses = function (node) {
-        var _this = this;
-        var classNames = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            classNames[_i - 1] = arguments[_i];
-        }
-        classNames.forEach(function (nameValue) { return nameValue.split(' ').forEach(function (name) { return _this.addClass(node, name); }); });
-    };
-    class_2.prototype.addClass = function (node, className) {
-        if (className && node.classList) {
-            node.classList.add(className);
-        }
-    };
-    class_2.prototype.removeClass = function (node, className) {
-        if (className && node.classList) {
-            node.classList.remove(className);
-        }
-    };
-    class_2.prototype.removeClasses = function (node) {
-        var _this = this;
-        var classNames = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            classNames[_i - 1] = arguments[_i];
-        }
-        classNames.forEach(function (nameValue) { return nameValue.split(' ').forEach(function (name) { return _this.removeClass(node, name); }); });
-    };
-    class_2.prototype.toggleClass = function (node, className, shouldHaveIt) {
-        if (node.classList) {
-            node.classList.toggle(className, shouldHaveIt);
-        }
-    };
-    return class_2;
-}());
-// In IE11 there is only partial support for `classList` which makes us keep our
-// custom implementation. Otherwise use the native implementation, see: http://caniuse.com/#search=classlist
-var _classList = browser.isIE ? _manualClassList : _nativeClassList;
-export var hasClass = _classList.hasClass.bind(_classList);
-export var addClass = _classList.addClass.bind(_classList);
-export var addClasses = _classList.addClasses.bind(_classList);
-export var removeClass = _classList.removeClass.bind(_classList);
-export var removeClasses = _classList.removeClasses.bind(_classList);
-export var toggleClass = _classList.toggleClass.bind(_classList);
-var DomListener = /** @class */ (function () {
-    function DomListener(node, type, handler, options) {
+class DomListener {
+    constructor(node, type, handler, options) {
         this._node = node;
         this._type = type;
         this._handler = handler;
         this._options = (options || false);
         this._node.addEventListener(this._type, this._handler, this._options);
     }
-    DomListener.prototype.dispose = function () {
+    dispose() {
         if (!this._handler) {
             // Already disposed
             return;
@@ -230,15 +105,14 @@ var DomListener = /** @class */ (function () {
         // Prevent leakers from holding on to the dom or handler func
         this._node = null;
         this._handler = null;
-    };
-    return DomListener;
-}());
+    }
+}
 export function addDisposableListener(node, type, handler, useCaptureOrOptions) {
     return new DomListener(node, type, handler, useCaptureOrOptions);
 }
-function _wrapAsStandardMouseEvent(handler) {
+function _wrapAsStandardMouseEvent(targetWindow, handler) {
     return function (e) {
-        return handler(new StandardMouseEvent(e));
+        return handler(new StandardMouseEvent(targetWindow, e));
     };
 }
 function _wrapAsStandardKeyboardEvent(handler) {
@@ -246,66 +120,60 @@ function _wrapAsStandardKeyboardEvent(handler) {
         return handler(new StandardKeyboardEvent(e));
     };
 }
-export var addStandardDisposableListener = function addStandardDisposableListener(node, type, handler, useCapture) {
-    var wrapHandler = handler;
-    if (type === 'click' || type === 'mousedown') {
-        wrapHandler = _wrapAsStandardMouseEvent(handler);
+export const addStandardDisposableListener = function addStandardDisposableListener(node, type, handler, useCapture) {
+    let wrapHandler = handler;
+    if (type === 'click' || type === 'mousedown' || type === 'contextmenu') {
+        wrapHandler = _wrapAsStandardMouseEvent(getWindow(node), handler);
     }
     else if (type === 'keydown' || type === 'keypress' || type === 'keyup') {
         wrapHandler = _wrapAsStandardKeyboardEvent(handler);
     }
     return addDisposableListener(node, type, wrapHandler, useCapture);
 };
-export var addStandardDisposableGenericMouseDownListner = function addStandardDisposableListener(node, handler, useCapture) {
-    var wrapHandler = _wrapAsStandardMouseEvent(handler);
-    return addDisposableGenericMouseDownListner(node, wrapHandler, useCapture);
+export const addStandardDisposableGenericMouseDownListener = function addStandardDisposableListener(node, handler, useCapture) {
+    const wrapHandler = _wrapAsStandardMouseEvent(getWindow(node), handler);
+    return addDisposableGenericMouseDownListener(node, wrapHandler, useCapture);
 };
-export function addDisposableGenericMouseDownListner(node, handler, useCapture) {
+export const addStandardDisposableGenericMouseUpListener = function addStandardDisposableListener(node, handler, useCapture) {
+    const wrapHandler = _wrapAsStandardMouseEvent(getWindow(node), handler);
+    return addDisposableGenericMouseUpListener(node, wrapHandler, useCapture);
+};
+export function addDisposableGenericMouseDownListener(node, handler, useCapture) {
     return addDisposableListener(node, platform.isIOS && BrowserFeatures.pointerEvents ? EventType.POINTER_DOWN : EventType.MOUSE_DOWN, handler, useCapture);
 }
-export function addDisposableGenericMouseUpListner(node, handler, useCapture) {
+export function addDisposableGenericMouseUpListener(node, handler, useCapture) {
     return addDisposableListener(node, platform.isIOS && BrowserFeatures.pointerEvents ? EventType.POINTER_UP : EventType.MOUSE_UP, handler, useCapture);
 }
-export function addDisposableNonBubblingMouseOutListener(node, handler) {
-    return addDisposableListener(node, 'mouseout', function (e) {
-        // Mouse out bubbles, so this is an attempt to ignore faux mouse outs coming from children elements
-        var toElement = (e.relatedTarget);
-        while (toElement && toElement !== node) {
-            toElement = toElement.parentNode;
-        }
-        if (toElement === node) {
-            return;
-        }
-        handler(e);
-    });
+/**
+ * Execute the callback the next time the browser is idle, returning an
+ * {@link IDisposable} that will cancel the callback when disposed. This wraps
+ * [requestIdleCallback] so it will fallback to [setTimeout] if the environment
+ * doesn't support it.
+ *
+ * @param targetWindow The window for which to run the idle callback
+ * @param callback The callback to run when idle, this includes an
+ * [IdleDeadline] that provides the time alloted for the idle callback by the
+ * browser. Not respecting this deadline will result in a degraded user
+ * experience.
+ * @param timeout A timeout at which point to queue no longer wait for an idle
+ * callback but queue it on the regular event loop (like setTimeout). Typically
+ * this should not be used.
+ *
+ * [IdleDeadline]: https://developer.mozilla.org/en-US/docs/Web/API/IdleDeadline
+ * [requestIdleCallback]: https://developer.mozilla.org/en-US/docs/Web/API/Window/requestIdleCallback
+ * [setTimeout]: https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout
+ */
+export function runWhenWindowIdle(targetWindow, callback, timeout) {
+    return _runWhenIdle(targetWindow, callback, timeout);
 }
-export function addDisposableNonBubblingPointerOutListener(node, handler) {
-    return addDisposableListener(node, 'pointerout', function (e) {
-        // Mouse out bubbles, so this is an attempt to ignore faux mouse outs coming from children elements
-        var toElement = (e.relatedTarget);
-        while (toElement && toElement !== node) {
-            toElement = toElement.parentNode;
-        }
-        if (toElement === node) {
-            return;
-        }
-        handler(e);
-    });
-}
-var _animationFrame = null;
-function doRequestAnimationFrame(callback) {
-    if (!_animationFrame) {
-        var emulatedRequestAnimationFrame = function (callback) {
-            return setTimeout(function () { return callback(new Date().getTime()); }, 0);
-        };
-        _animationFrame = (self.requestAnimationFrame
-            || self.msRequestAnimationFrame
-            || self.webkitRequestAnimationFrame
-            || self.mozRequestAnimationFrame
-            || self.oRequestAnimationFrame
-            || emulatedRequestAnimationFrame);
+/**
+ * An implementation of the "idle-until-urgent"-strategy as introduced
+ * here: https://philipwalton.com/articles/idle-until-urgent/
+ */
+export class WindowIdleValue extends AbstractIdleValue {
+    constructor(targetWindow, executor) {
+        super(targetWindow, executor);
     }
-    return _animationFrame.call(self, callback);
 }
 /**
  * Schedule a callback to be run at the next animation frame.
@@ -313,25 +181,37 @@ function doRequestAnimationFrame(callback) {
  * If currently in an animation frame, `runner` will be executed immediately.
  * @return token that can be used to cancel the scheduled runner (only if `runner` was not executed immediately).
  */
-export var runAtThisOrScheduleAtNextAnimationFrame;
+export let runAtThisOrScheduleAtNextAnimationFrame;
 /**
  * Schedule a callback to be run at the next animation frame.
  * This allows multiple parties to register callbacks that should run at the next animation frame.
  * If currently in an animation frame, `runner` will be executed at the next animation frame.
  * @return token that can be used to cancel the scheduled runner.
  */
-export var scheduleAtNextAnimationFrame;
-var AnimationFrameQueueItem = /** @class */ (function () {
-    function AnimationFrameQueueItem(runner, priority) {
-        if (priority === void 0) { priority = 0; }
+export let scheduleAtNextAnimationFrame;
+export class WindowIntervalTimer extends IntervalTimer {
+    /**
+     *
+     * @param node The optional node from which the target window is determined
+     */
+    constructor(node) {
+        super();
+        this.defaultTarget = node && getWindow(node);
+    }
+    cancelAndSet(runner, interval, targetWindow) {
+        return super.cancelAndSet(runner, interval, targetWindow ?? this.defaultTarget);
+    }
+}
+class AnimationFrameQueueItem {
+    constructor(runner, priority = 0) {
         this._runner = runner;
         this.priority = priority;
         this._canceled = false;
     }
-    AnimationFrameQueueItem.prototype.dispose = function () {
+    dispose() {
         this._canceled = true;
-    };
-    AnimationFrameQueueItem.prototype.execute = function () {
+    }
+    execute() {
         if (this._canceled) {
             return;
         }
@@ -341,213 +221,199 @@ var AnimationFrameQueueItem = /** @class */ (function () {
         catch (e) {
             onUnexpectedError(e);
         }
-    };
+    }
     // Sort by priority (largest to lowest)
-    AnimationFrameQueueItem.sort = function (a, b) {
+    static sort(a, b) {
         return b.priority - a.priority;
-    };
-    return AnimationFrameQueueItem;
-}());
+    }
+}
 (function () {
     /**
      * The runners scheduled at the next animation frame
      */
-    var NEXT_QUEUE = [];
+    const NEXT_QUEUE = new Map();
     /**
      * The runners scheduled at the current animation frame
      */
-    var CURRENT_QUEUE = null;
+    const CURRENT_QUEUE = new Map();
     /**
      * A flag to keep track if the native requestAnimationFrame was already called
      */
-    var animFrameRequested = false;
+    const animFrameRequested = new Map();
     /**
      * A flag to indicate if currently handling a native requestAnimationFrame callback
      */
-    var inAnimationFrameRunner = false;
-    var animationFrameRunner = function () {
-        animFrameRequested = false;
-        CURRENT_QUEUE = NEXT_QUEUE;
-        NEXT_QUEUE = [];
-        inAnimationFrameRunner = true;
-        while (CURRENT_QUEUE.length > 0) {
-            CURRENT_QUEUE.sort(AnimationFrameQueueItem.sort);
-            var top_1 = CURRENT_QUEUE.shift();
-            top_1.execute();
+    const inAnimationFrameRunner = new Map();
+    const animationFrameRunner = (targetWindowId) => {
+        animFrameRequested.set(targetWindowId, false);
+        const currentQueue = NEXT_QUEUE.get(targetWindowId) ?? [];
+        CURRENT_QUEUE.set(targetWindowId, currentQueue);
+        NEXT_QUEUE.set(targetWindowId, []);
+        inAnimationFrameRunner.set(targetWindowId, true);
+        while (currentQueue.length > 0) {
+            currentQueue.sort(AnimationFrameQueueItem.sort);
+            const top = currentQueue.shift();
+            top.execute();
         }
-        inAnimationFrameRunner = false;
+        inAnimationFrameRunner.set(targetWindowId, false);
     };
-    scheduleAtNextAnimationFrame = function (runner, priority) {
-        if (priority === void 0) { priority = 0; }
-        var item = new AnimationFrameQueueItem(runner, priority);
-        NEXT_QUEUE.push(item);
-        if (!animFrameRequested) {
-            animFrameRequested = true;
-            doRequestAnimationFrame(animationFrameRunner);
+    scheduleAtNextAnimationFrame = (targetWindow, runner, priority = 0) => {
+        const targetWindowId = getWindowId(targetWindow);
+        const item = new AnimationFrameQueueItem(runner, priority);
+        let nextQueue = NEXT_QUEUE.get(targetWindowId);
+        if (!nextQueue) {
+            nextQueue = [];
+            NEXT_QUEUE.set(targetWindowId, nextQueue);
+        }
+        nextQueue.push(item);
+        if (!animFrameRequested.get(targetWindowId)) {
+            animFrameRequested.set(targetWindowId, true);
+            targetWindow.requestAnimationFrame(() => animationFrameRunner(targetWindowId));
         }
         return item;
     };
-    runAtThisOrScheduleAtNextAnimationFrame = function (runner, priority) {
-        if (inAnimationFrameRunner) {
-            var item = new AnimationFrameQueueItem(runner, priority);
-            CURRENT_QUEUE.push(item);
+    runAtThisOrScheduleAtNextAnimationFrame = (targetWindow, runner, priority) => {
+        const targetWindowId = getWindowId(targetWindow);
+        if (inAnimationFrameRunner.get(targetWindowId)) {
+            const item = new AnimationFrameQueueItem(runner, priority);
+            let currentQueue = CURRENT_QUEUE.get(targetWindowId);
+            if (!currentQueue) {
+                currentQueue = [];
+                CURRENT_QUEUE.set(targetWindowId, currentQueue);
+            }
+            currentQueue.push(item);
             return item;
         }
         else {
-            return scheduleAtNextAnimationFrame(runner, priority);
+            return scheduleAtNextAnimationFrame(targetWindow, runner, priority);
         }
     };
 })();
-var MINIMUM_TIME_MS = 16;
-var DEFAULT_EVENT_MERGER = function (lastEvent, currentEvent) {
-    return currentEvent;
-};
-var TimeoutThrottledDomListener = /** @class */ (function (_super) {
-    __extends(TimeoutThrottledDomListener, _super);
-    function TimeoutThrottledDomListener(node, type, handler, eventMerger, minimumTimeMs) {
-        if (eventMerger === void 0) { eventMerger = DEFAULT_EVENT_MERGER; }
-        if (minimumTimeMs === void 0) { minimumTimeMs = MINIMUM_TIME_MS; }
-        var _this = _super.call(this) || this;
-        var lastEvent = null;
-        var lastHandlerTime = 0;
-        var timeout = _this._register(new TimeoutTimer());
-        var invokeHandler = function () {
-            lastHandlerTime = (new Date()).getTime();
-            handler(lastEvent);
-            lastEvent = null;
-        };
-        _this._register(addDisposableListener(node, type, function (e) {
-            lastEvent = eventMerger(lastEvent, e);
-            var elapsedTime = (new Date()).getTime() - lastHandlerTime;
-            if (elapsedTime >= minimumTimeMs) {
-                timeout.cancel();
-                invokeHandler();
-            }
-            else {
-                timeout.setIfNotSet(invokeHandler, minimumTimeMs - elapsedTime);
-            }
-        }));
-        return _this;
-    }
-    return TimeoutThrottledDomListener;
-}(Disposable));
-export function addDisposableThrottledListener(node, type, handler, eventMerger, minimumTimeMs) {
-    return new TimeoutThrottledDomListener(node, type, handler, eventMerger, minimumTimeMs);
-}
 export function getComputedStyle(el) {
-    return document.defaultView.getComputedStyle(el, null);
+    return getWindow(el).getComputedStyle(el, null);
 }
-export function getClientArea(element) {
+export function getClientArea(element, fallback) {
+    const elWindow = getWindow(element);
+    const elDocument = elWindow.document;
     // Try with DOM clientWidth / clientHeight
-    if (element !== document.body) {
+    if (element !== elDocument.body) {
         return new Dimension(element.clientWidth, element.clientHeight);
     }
     // If visual view port exits and it's on mobile, it should be used instead of window innerWidth / innerHeight, or document.body.clientWidth / document.body.clientHeight
-    if (platform.isIOS && window.visualViewport) {
-        var width = window.visualViewport.width;
-        var height = window.visualViewport.height - (browser.isStandalone
-            // in PWA mode, the visual viewport always includes the safe-area-inset-bottom (which is for the home indicator)
-            // even when you are using the onscreen monitor, the visual viewport will include the area between system statusbar and the onscreen keyboard
-            // plus the area between onscreen keyboard and the bottom bezel, which is 20px on iOS.
-            ? (20 + 4) // + 4px for body margin
-            : 0);
-        return new Dimension(width, height);
+    if (platform.isIOS && elWindow?.visualViewport) {
+        return new Dimension(elWindow.visualViewport.width, elWindow.visualViewport.height);
     }
     // Try innerWidth / innerHeight
-    if (window.innerWidth && window.innerHeight) {
-        return new Dimension(window.innerWidth, window.innerHeight);
+    if (elWindow?.innerWidth && elWindow.innerHeight) {
+        return new Dimension(elWindow.innerWidth, elWindow.innerHeight);
     }
     // Try with document.body.clientWidth / document.body.clientHeight
-    if (document.body && document.body.clientWidth && document.body.clientHeight) {
-        return new Dimension(document.body.clientWidth, document.body.clientHeight);
+    if (elDocument.body && elDocument.body.clientWidth && elDocument.body.clientHeight) {
+        return new Dimension(elDocument.body.clientWidth, elDocument.body.clientHeight);
     }
     // Try with document.documentElement.clientWidth / document.documentElement.clientHeight
-    if (document.documentElement && document.documentElement.clientWidth && document.documentElement.clientHeight) {
-        return new Dimension(document.documentElement.clientWidth, document.documentElement.clientHeight);
+    if (elDocument.documentElement && elDocument.documentElement.clientWidth && elDocument.documentElement.clientHeight) {
+        return new Dimension(elDocument.documentElement.clientWidth, elDocument.documentElement.clientHeight);
+    }
+    if (fallback) {
+        return getClientArea(fallback);
     }
     throw new Error('Unable to figure out browser width and height');
 }
-var SizeUtils = /** @class */ (function () {
-    function SizeUtils() {
-    }
+class SizeUtils {
     // Adapted from WinJS
     // Converts a CSS positioning string for the specified element to pixels.
-    SizeUtils.convertToPixels = function (element, value) {
+    static convertToPixels(element, value) {
         return parseFloat(value) || 0;
-    };
-    SizeUtils.getDimension = function (element, cssPropertyName, jsPropertyName) {
-        var computedStyle = getComputedStyle(element);
-        var value = '0';
-        if (computedStyle) {
-            if (computedStyle.getPropertyValue) {
-                value = computedStyle.getPropertyValue(cssPropertyName);
-            }
-            else {
-                // IE8
-                value = computedStyle.getAttribute(jsPropertyName);
-            }
-        }
+    }
+    static getDimension(element, cssPropertyName, jsPropertyName) {
+        const computedStyle = getComputedStyle(element);
+        const value = computedStyle ? computedStyle.getPropertyValue(cssPropertyName) : '0';
         return SizeUtils.convertToPixels(element, value);
-    };
-    SizeUtils.getBorderLeftWidth = function (element) {
+    }
+    static getBorderLeftWidth(element) {
         return SizeUtils.getDimension(element, 'border-left-width', 'borderLeftWidth');
-    };
-    SizeUtils.getBorderRightWidth = function (element) {
+    }
+    static getBorderRightWidth(element) {
         return SizeUtils.getDimension(element, 'border-right-width', 'borderRightWidth');
-    };
-    SizeUtils.getBorderTopWidth = function (element) {
+    }
+    static getBorderTopWidth(element) {
         return SizeUtils.getDimension(element, 'border-top-width', 'borderTopWidth');
-    };
-    SizeUtils.getBorderBottomWidth = function (element) {
+    }
+    static getBorderBottomWidth(element) {
         return SizeUtils.getDimension(element, 'border-bottom-width', 'borderBottomWidth');
-    };
-    SizeUtils.getPaddingLeft = function (element) {
+    }
+    static getPaddingLeft(element) {
         return SizeUtils.getDimension(element, 'padding-left', 'paddingLeft');
-    };
-    SizeUtils.getPaddingRight = function (element) {
+    }
+    static getPaddingRight(element) {
         return SizeUtils.getDimension(element, 'padding-right', 'paddingRight');
-    };
-    SizeUtils.getPaddingTop = function (element) {
+    }
+    static getPaddingTop(element) {
         return SizeUtils.getDimension(element, 'padding-top', 'paddingTop');
-    };
-    SizeUtils.getPaddingBottom = function (element) {
+    }
+    static getPaddingBottom(element) {
         return SizeUtils.getDimension(element, 'padding-bottom', 'paddingBottom');
-    };
-    SizeUtils.getMarginLeft = function (element) {
+    }
+    static getMarginLeft(element) {
         return SizeUtils.getDimension(element, 'margin-left', 'marginLeft');
-    };
-    SizeUtils.getMarginTop = function (element) {
+    }
+    static getMarginTop(element) {
         return SizeUtils.getDimension(element, 'margin-top', 'marginTop');
-    };
-    SizeUtils.getMarginRight = function (element) {
+    }
+    static getMarginRight(element) {
         return SizeUtils.getDimension(element, 'margin-right', 'marginRight');
-    };
-    SizeUtils.getMarginBottom = function (element) {
+    }
+    static getMarginBottom(element) {
         return SizeUtils.getDimension(element, 'margin-bottom', 'marginBottom');
-    };
-    return SizeUtils;
-}());
-// ----------------------------------------------------------------------------------------
-// Position & Dimension
-var Dimension = /** @class */ (function () {
-    function Dimension(width, height) {
+    }
+}
+export class Dimension {
+    static { this.None = new Dimension(0, 0); }
+    constructor(width, height) {
         this.width = width;
         this.height = height;
     }
-    return Dimension;
-}());
-export { Dimension };
+    with(width = this.width, height = this.height) {
+        if (width !== this.width || height !== this.height) {
+            return new Dimension(width, height);
+        }
+        else {
+            return this;
+        }
+    }
+    static is(obj) {
+        return typeof obj === 'object' && typeof obj.height === 'number' && typeof obj.width === 'number';
+    }
+    static lift(obj) {
+        if (obj instanceof Dimension) {
+            return obj;
+        }
+        else {
+            return new Dimension(obj.width, obj.height);
+        }
+    }
+    static equals(a, b) {
+        if (a === b) {
+            return true;
+        }
+        if (!a || !b) {
+            return false;
+        }
+        return a.width === b.width && a.height === b.height;
+    }
+}
 export function getTopLeftOffset(element) {
     // Adapted from WinJS.Utilities.getPosition
     // and added borders to the mix
-    var offsetParent = element.offsetParent;
-    var top = element.offsetTop;
-    var left = element.offsetLeft;
+    let offsetParent = element.offsetParent;
+    let top = element.offsetTop;
+    let left = element.offsetLeft;
     while ((element = element.parentNode) !== null
-        && element !== document.body
-        && element !== document.documentElement) {
+        && element !== element.ownerDocument.body
+        && element !== element.ownerDocument.documentElement) {
         top -= element.scrollTop;
-        var c = isShadowRoot(element) ? null : getComputedStyle(element);
+        const c = isShadowRoot(element) ? null : getComputedStyle(element);
         if (c) {
             left -= c.direction !== 'rtl' ? element.scrollLeft : -element.scrollLeft;
         }
@@ -564,91 +430,78 @@ export function getTopLeftOffset(element) {
         top: top
     };
 }
+export function size(element, width, height) {
+    if (typeof width === 'number') {
+        element.style.width = `${width}px`;
+    }
+    if (typeof height === 'number') {
+        element.style.height = `${height}px`;
+    }
+}
 /**
  * Returns the position of a dom node relative to the entire page.
  */
 export function getDomNodePagePosition(domNode) {
-    var bb = domNode.getBoundingClientRect();
+    const bb = domNode.getBoundingClientRect();
+    const window = getWindow(domNode);
     return {
-        left: bb.left + StandardWindow.scrollX,
-        top: bb.top + StandardWindow.scrollY,
+        left: bb.left + window.scrollX,
+        top: bb.top + window.scrollY,
         width: bb.width,
         height: bb.height
     };
 }
-export var StandardWindow = new /** @class */ (function () {
-    function class_3() {
-    }
-    Object.defineProperty(class_3.prototype, "scrollX", {
-        get: function () {
-            if (typeof window.scrollX === 'number') {
-                // modern browsers
-                return window.scrollX;
-            }
-            else {
-                return document.body.scrollLeft + document.documentElement.scrollLeft;
-            }
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(class_3.prototype, "scrollY", {
-        get: function () {
-            if (typeof window.scrollY === 'number') {
-                // modern browsers
-                return window.scrollY;
-            }
-            else {
-                return document.body.scrollTop + document.documentElement.scrollTop;
-            }
-        },
-        enumerable: true,
-        configurable: true
-    });
-    return class_3;
-}());
+/**
+ * Returns the effective zoom on a given element before window zoom level is applied
+ */
+export function getDomNodeZoomLevel(domNode) {
+    let testElement = domNode;
+    let zoom = 1.0;
+    do {
+        const elementZoomLevel = getComputedStyle(testElement).zoom;
+        if (elementZoomLevel !== null && elementZoomLevel !== undefined && elementZoomLevel !== '1') {
+            zoom *= elementZoomLevel;
+        }
+        testElement = testElement.parentElement;
+    } while (testElement !== null && testElement !== testElement.ownerDocument.documentElement);
+    return zoom;
+}
 // Adapted from WinJS
 // Gets the width of the element, including margins.
 export function getTotalWidth(element) {
-    var margin = SizeUtils.getMarginLeft(element) + SizeUtils.getMarginRight(element);
+    const margin = SizeUtils.getMarginLeft(element) + SizeUtils.getMarginRight(element);
     return element.offsetWidth + margin;
 }
 export function getContentWidth(element) {
-    var border = SizeUtils.getBorderLeftWidth(element) + SizeUtils.getBorderRightWidth(element);
-    var padding = SizeUtils.getPaddingLeft(element) + SizeUtils.getPaddingRight(element);
+    const border = SizeUtils.getBorderLeftWidth(element) + SizeUtils.getBorderRightWidth(element);
+    const padding = SizeUtils.getPaddingLeft(element) + SizeUtils.getPaddingRight(element);
     return element.offsetWidth - border - padding;
 }
 // Adapted from WinJS
 // Gets the height of the content of the specified element. The content height does not include borders or padding.
 export function getContentHeight(element) {
-    var border = SizeUtils.getBorderTopWidth(element) + SizeUtils.getBorderBottomWidth(element);
-    var padding = SizeUtils.getPaddingTop(element) + SizeUtils.getPaddingBottom(element);
+    const border = SizeUtils.getBorderTopWidth(element) + SizeUtils.getBorderBottomWidth(element);
+    const padding = SizeUtils.getPaddingTop(element) + SizeUtils.getPaddingBottom(element);
     return element.offsetHeight - border - padding;
 }
 // Adapted from WinJS
 // Gets the height of the element, including its margins.
 export function getTotalHeight(element) {
-    var margin = SizeUtils.getMarginTop(element) + SizeUtils.getMarginBottom(element);
+    const margin = SizeUtils.getMarginTop(element) + SizeUtils.getMarginBottom(element);
     return element.offsetHeight + margin;
 }
 // ----------------------------------------------------------------------------------------
 export function isAncestor(testChild, testAncestor) {
-    while (testChild) {
-        if (testChild === testAncestor) {
-            return true;
-        }
-        testChild = testChild.parentNode;
-    }
-    return false;
+    return Boolean(testAncestor?.contains(testChild));
 }
 export function findParentWithClass(node, clazz, stopAtClazzOrNode) {
     while (node && node.nodeType === node.ELEMENT_NODE) {
-        if (hasClass(node, clazz)) {
+        if (node.classList.contains(clazz)) {
             return node;
         }
         if (stopAtClazzOrNode) {
             if (typeof stopAtClazzOrNode === 'string') {
-                if (hasClass(node, stopAtClazzOrNode)) {
+                if (node.classList.contains(stopAtClazzOrNode)) {
                     return null;
                 }
             }
@@ -662,6 +515,9 @@ export function findParentWithClass(node, clazz, stopAtClazzOrNode) {
     }
     return null;
 }
+export function hasParentWithClass(node, clazz, stopAtClazzOrNode) {
+    return !!findParentWithClass(node, clazz, stopAtClazzOrNode);
+}
 export function isShadowRoot(node) {
     return (node && !!node.host && !!node.mode);
 }
@@ -670,7 +526,7 @@ export function isInShadowDOM(domNode) {
 }
 export function getShadowRoot(domNode) {
     while (domNode.parentNode) {
-        if (domNode === document.body) {
+        if (domNode === domNode.ownerDocument?.body) {
             // reached the body
             return null;
         }
@@ -678,15 +534,165 @@ export function getShadowRoot(domNode) {
     }
     return isShadowRoot(domNode) ? domNode : null;
 }
-export function createStyleSheet(container) {
-    if (container === void 0) { container = document.getElementsByTagName('head')[0]; }
-    var style = document.createElement('style');
+/**
+ * Returns the active element across all child windows
+ * based on document focus. Falls back to the main
+ * window if no window has focus.
+ */
+export function getActiveElement() {
+    let result = getActiveDocument().activeElement;
+    while (result?.shadowRoot) {
+        result = result.shadowRoot.activeElement;
+    }
+    return result;
+}
+/**
+ * Returns true if the focused window active element matches
+ * the provided element. Falls back to the main window if no
+ * window has focus.
+ */
+export function isActiveElement(element) {
+    return getActiveElement() === element;
+}
+/**
+ * Returns true if the focused window active element is contained in
+ * `ancestor`. Falls back to the main window if no window has focus.
+ */
+export function isAncestorOfActiveElement(ancestor) {
+    return isAncestor(getActiveElement(), ancestor);
+}
+/**
+ * Returns the active document across main and child windows.
+ * Prefers the window with focus, otherwise falls back to
+ * the main windows document.
+ */
+export function getActiveDocument() {
+    if (getWindowsCount() <= 1) {
+        return mainWindow.document;
+    }
+    const documents = Array.from(getWindows()).map(({ window }) => window.document);
+    return documents.find(doc => doc.hasFocus()) ?? mainWindow.document;
+}
+/**
+ * Returns the active window across main and child windows.
+ * Prefers the window with focus, otherwise falls back to
+ * the main window.
+ */
+export function getActiveWindow() {
+    const document = getActiveDocument();
+    return (document.defaultView?.window ?? mainWindow);
+}
+const globalStylesheets = new Map();
+/**
+ * A version of createStyleSheet which has a unified API to initialize/set the style content.
+ */
+export function createStyleSheet2() {
+    return new WrappedStyleElement();
+}
+class WrappedStyleElement {
+    constructor() {
+        this._currentCssStyle = '';
+        this._styleSheet = undefined;
+    }
+    setStyle(cssStyle) {
+        if (cssStyle === this._currentCssStyle) {
+            return;
+        }
+        this._currentCssStyle = cssStyle;
+        if (!this._styleSheet) {
+            this._styleSheet = createStyleSheet(mainWindow.document.head, (s) => s.innerText = cssStyle);
+        }
+        else {
+            this._styleSheet.innerText = cssStyle;
+        }
+    }
+    dispose() {
+        if (this._styleSheet) {
+            this._styleSheet.remove();
+            this._styleSheet = undefined;
+        }
+    }
+}
+export function createStyleSheet(container = mainWindow.document.head, beforeAppend, disposableStore) {
+    const style = document.createElement('style');
     style.type = 'text/css';
     style.media = 'screen';
+    beforeAppend?.(style);
     container.appendChild(style);
+    if (disposableStore) {
+        disposableStore.add(toDisposable(() => style.remove()));
+    }
+    // With <head> as container, the stylesheet becomes global and is tracked
+    // to support auxiliary windows to clone the stylesheet.
+    if (container === mainWindow.document.head) {
+        const globalStylesheetClones = new Set();
+        globalStylesheets.set(style, globalStylesheetClones);
+        for (const { window: targetWindow, disposables } of getWindows()) {
+            if (targetWindow === mainWindow) {
+                continue; // main window is already tracked
+            }
+            const cloneDisposable = disposables.add(cloneGlobalStyleSheet(style, globalStylesheetClones, targetWindow));
+            disposableStore?.add(cloneDisposable);
+        }
+    }
     return style;
 }
-var _sharedStyleSheet = null;
+function cloneGlobalStyleSheet(globalStylesheet, globalStylesheetClones, targetWindow) {
+    const disposables = new DisposableStore();
+    const clone = globalStylesheet.cloneNode(true);
+    targetWindow.document.head.appendChild(clone);
+    disposables.add(toDisposable(() => clone.remove()));
+    for (const rule of getDynamicStyleSheetRules(globalStylesheet)) {
+        clone.sheet?.insertRule(rule.cssText, clone.sheet?.cssRules.length);
+    }
+    disposables.add(sharedMutationObserver.observe(globalStylesheet, disposables, { childList: true })(() => {
+        clone.textContent = globalStylesheet.textContent;
+    }));
+    globalStylesheetClones.add(clone);
+    disposables.add(toDisposable(() => globalStylesheetClones.delete(clone)));
+    return disposables;
+}
+export const sharedMutationObserver = new class {
+    constructor() {
+        this.mutationObservers = new Map();
+    }
+    observe(target, disposables, options) {
+        let mutationObserversPerTarget = this.mutationObservers.get(target);
+        if (!mutationObserversPerTarget) {
+            mutationObserversPerTarget = new Map();
+            this.mutationObservers.set(target, mutationObserversPerTarget);
+        }
+        const optionsHash = hash(options);
+        let mutationObserverPerOptions = mutationObserversPerTarget.get(optionsHash);
+        if (!mutationObserverPerOptions) {
+            const onDidMutate = new event.Emitter();
+            const observer = new MutationObserver(mutations => onDidMutate.fire(mutations));
+            observer.observe(target, options);
+            const resolvedMutationObserverPerOptions = mutationObserverPerOptions = {
+                users: 1,
+                observer,
+                onDidMutate: onDidMutate.event
+            };
+            disposables.add(toDisposable(() => {
+                resolvedMutationObserverPerOptions.users -= 1;
+                if (resolvedMutationObserverPerOptions.users === 0) {
+                    onDidMutate.dispose();
+                    observer.disconnect();
+                    mutationObserversPerTarget?.delete(optionsHash);
+                    if (mutationObserversPerTarget?.size === 0) {
+                        this.mutationObservers.delete(target);
+                    }
+                }
+            }));
+            mutationObserversPerTarget.set(optionsHash, mutationObserverPerOptions);
+        }
+        else {
+            mutationObserverPerOptions.users += 1;
+        }
+        return mutationObserverPerOptions.onDidMutate;
+    }
+};
+let _sharedStyleSheet = null;
 function getSharedStyleSheet() {
     if (!_sharedStyleSheet) {
         _sharedStyleSheet = createStyleSheet();
@@ -694,49 +700,73 @@ function getSharedStyleSheet() {
     return _sharedStyleSheet;
 }
 function getDynamicStyleSheetRules(style) {
-    if (style && style.sheet && style.sheet.rules) {
+    if (style?.sheet?.rules) {
         // Chrome, IE
         return style.sheet.rules;
     }
-    if (style && style.sheet && style.sheet.cssRules) {
+    if (style?.sheet?.cssRules) {
         // FF
         return style.sheet.cssRules;
     }
     return [];
 }
-export function createCSSRule(selector, cssText, style) {
-    if (style === void 0) { style = getSharedStyleSheet(); }
+export function createCSSRule(selector, cssText, style = getSharedStyleSheet()) {
     if (!style || !cssText) {
         return;
     }
-    style.sheet.insertRule(selector + '{' + cssText + '}', 0);
+    style.sheet?.insertRule(`${selector} {${cssText}}`, 0);
+    // Apply rule also to all cloned global stylesheets
+    for (const clonedGlobalStylesheet of globalStylesheets.get(style) ?? []) {
+        createCSSRule(selector, cssText, clonedGlobalStylesheet);
+    }
 }
-export function removeCSSRulesContainingSelector(ruleName, style) {
-    if (style === void 0) { style = getSharedStyleSheet(); }
+export function removeCSSRulesContainingSelector(ruleName, style = getSharedStyleSheet()) {
     if (!style) {
         return;
     }
-    var rules = getDynamicStyleSheetRules(style);
-    var toDelete = [];
-    for (var i = 0; i < rules.length; i++) {
-        var rule = rules[i];
-        if (rule.selectorText.indexOf(ruleName) !== -1) {
+    const rules = getDynamicStyleSheetRules(style);
+    const toDelete = [];
+    for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
+        if (isCSSStyleRule(rule) && rule.selectorText.indexOf(ruleName) !== -1) {
             toDelete.push(i);
         }
     }
-    for (var i = toDelete.length - 1; i >= 0; i--) {
-        style.sheet.deleteRule(toDelete[i]);
+    for (let i = toDelete.length - 1; i >= 0; i--) {
+        style.sheet?.deleteRule(toDelete[i]);
+    }
+    // Remove rules also from all cloned global stylesheets
+    for (const clonedGlobalStylesheet of globalStylesheets.get(style) ?? []) {
+        removeCSSRulesContainingSelector(ruleName, clonedGlobalStylesheet);
     }
 }
-export function isHTMLElement(o) {
-    if (typeof HTMLElement === 'object') {
-        return o instanceof HTMLElement;
-    }
-    return o && typeof o === 'object' && o.nodeType === 1 && typeof o.nodeName === 'string';
+function isCSSStyleRule(rule) {
+    return typeof rule.selectorText === 'string';
 }
-export var EventType = {
+export function isHTMLElement(e) {
+    // eslint-disable-next-line no-restricted-syntax
+    return e instanceof HTMLElement || e instanceof getWindow(e).HTMLElement;
+}
+export function isHTMLAnchorElement(e) {
+    // eslint-disable-next-line no-restricted-syntax
+    return e instanceof HTMLAnchorElement || e instanceof getWindow(e).HTMLAnchorElement;
+}
+export function isSVGElement(e) {
+    // eslint-disable-next-line no-restricted-syntax
+    return e instanceof SVGElement || e instanceof getWindow(e).SVGElement;
+}
+export function isMouseEvent(e) {
+    // eslint-disable-next-line no-restricted-syntax
+    return e instanceof MouseEvent || e instanceof getWindow(e).MouseEvent;
+}
+export function isKeyboardEvent(e) {
+    // eslint-disable-next-line no-restricted-syntax
+    return e instanceof KeyboardEvent || e instanceof getWindow(e).KeyboardEvent;
+}
+export const EventType = {
     // Mouse
     CLICK: 'click',
+    AUXCLICK: 'auxclick',
     DBLCLICK: 'dblclick',
     MOUSE_UP: 'mouseup',
     MOUSE_DOWN: 'mousedown',
@@ -745,9 +775,11 @@ export var EventType = {
     MOUSE_OUT: 'mouseout',
     MOUSE_ENTER: 'mouseenter',
     MOUSE_LEAVE: 'mouseleave',
+    MOUSE_WHEEL: 'wheel',
     POINTER_UP: 'pointerup',
     POINTER_DOWN: 'pointerdown',
     POINTER_MOVE: 'pointermove',
+    POINTER_LEAVE: 'pointerleave',
     CONTEXT_MENU: 'contextmenu',
     WHEEL: 'wheel',
     // Keyboard
@@ -758,6 +790,9 @@ export var EventType = {
     LOAD: 'load',
     BEFORE_UNLOAD: 'beforeunload',
     UNLOAD: 'unload',
+    PAGE_SHOW: 'pageshow',
+    PAGE_HIDE: 'pagehide',
+    PASTE: 'paste',
     ABORT: 'abort',
     ERROR: 'error',
     RESIZE: 'resize',
@@ -789,73 +824,76 @@ export var EventType = {
     ANIMATION_END: browser.isWebKit ? 'webkitAnimationEnd' : 'animationend',
     ANIMATION_ITERATION: browser.isWebKit ? 'webkitAnimationIteration' : 'animationiteration'
 };
-export var EventHelper = {
-    stop: function (e, cancelBubble) {
-        if (e.preventDefault) {
-            e.preventDefault();
-        }
-        else {
-            // IE8
-            e.returnValue = false;
-        }
+export function isEventLike(obj) {
+    const candidate = obj;
+    return !!(candidate && typeof candidate.preventDefault === 'function' && typeof candidate.stopPropagation === 'function');
+}
+export const EventHelper = {
+    stop: (e, cancelBubble) => {
+        e.preventDefault();
         if (cancelBubble) {
-            if (e.stopPropagation) {
-                e.stopPropagation();
-            }
-            else {
-                // IE8
-                e.cancelBubble = true;
-            }
+            e.stopPropagation();
         }
+        return e;
     }
 };
 export function saveParentsScrollTop(node) {
-    var r = [];
-    for (var i = 0; node && node.nodeType === node.ELEMENT_NODE; i++) {
+    const r = [];
+    for (let i = 0; node && node.nodeType === node.ELEMENT_NODE; i++) {
         r[i] = node.scrollTop;
         node = node.parentNode;
     }
     return r;
 }
 export function restoreParentsScrollTop(node, state) {
-    for (var i = 0; node && node.nodeType === node.ELEMENT_NODE; i++) {
+    for (let i = 0; node && node.nodeType === node.ELEMENT_NODE; i++) {
         if (node.scrollTop !== state[i]) {
             node.scrollTop = state[i];
         }
         node = node.parentNode;
     }
 }
-var FocusTracker = /** @class */ (function (_super) {
-    __extends(FocusTracker, _super);
-    function FocusTracker(element) {
-        var _this = _super.call(this) || this;
-        _this._onDidFocus = _this._register(new Emitter());
-        _this.onDidFocus = _this._onDidFocus.event;
-        _this._onDidBlur = _this._register(new Emitter());
-        _this.onDidBlur = _this._onDidBlur.event;
-        var hasFocus = isAncestor(document.activeElement, element);
-        var loosingFocus = false;
-        var onFocus = function () {
+class FocusTracker extends Disposable {
+    static hasFocusWithin(element) {
+        if (isHTMLElement(element)) {
+            const shadowRoot = getShadowRoot(element);
+            const activeElement = (shadowRoot ? shadowRoot.activeElement : element.ownerDocument.activeElement);
+            return isAncestor(activeElement, element);
+        }
+        else {
+            const window = element;
+            return isAncestor(window.document.activeElement, window.document);
+        }
+    }
+    constructor(element) {
+        super();
+        this._onDidFocus = this._register(new event.Emitter());
+        this.onDidFocus = this._onDidFocus.event;
+        this._onDidBlur = this._register(new event.Emitter());
+        this.onDidBlur = this._onDidBlur.event;
+        let hasFocus = FocusTracker.hasFocusWithin(element);
+        let loosingFocus = false;
+        const onFocus = () => {
             loosingFocus = false;
             if (!hasFocus) {
                 hasFocus = true;
-                _this._onDidFocus.fire();
+                this._onDidFocus.fire();
             }
         };
-        var onBlur = function () {
+        const onBlur = () => {
             if (hasFocus) {
                 loosingFocus = true;
-                window.setTimeout(function () {
+                (isHTMLElement(element) ? getWindow(element) : element).setTimeout(() => {
                     if (loosingFocus) {
                         loosingFocus = false;
                         hasFocus = false;
-                        _this._onDidBlur.fire();
+                        this._onDidBlur.fire();
                     }
                 }, 0);
             }
         };
-        _this._refreshStateHandler = function () {
-            var currentNodeHasFocus = isAncestor(document.activeElement, element);
+        this._refreshStateHandler = () => {
+            const currentNodeHasFocus = FocusTracker.hasFocusWithin(element);
             if (currentNodeHasFocus !== hasFocus) {
                 if (hasFocus) {
                     onBlur();
@@ -865,41 +903,57 @@ var FocusTracker = /** @class */ (function (_super) {
                 }
             }
         };
-        _this._register(domEvent(element, EventType.FOCUS, true)(onFocus));
-        _this._register(domEvent(element, EventType.BLUR, true)(onBlur));
-        return _this;
+        this._register(addDisposableListener(element, EventType.FOCUS, onFocus, true));
+        this._register(addDisposableListener(element, EventType.BLUR, onBlur, true));
+        if (isHTMLElement(element)) {
+            this._register(addDisposableListener(element, EventType.FOCUS_IN, () => this._refreshStateHandler()));
+            this._register(addDisposableListener(element, EventType.FOCUS_OUT, () => this._refreshStateHandler()));
+        }
     }
-    return FocusTracker;
-}(Disposable));
+}
+/**
+ * Creates a new `IFocusTracker` instance that tracks focus changes on the given `element` and its descendants.
+ *
+ * @param element The `HTMLElement` or `Window` to track focus changes on.
+ * @returns An `IFocusTracker` instance.
+ */
 export function trackFocus(element) {
     return new FocusTracker(element);
 }
-export function append(parent) {
-    var children = [];
-    for (var _i = 1; _i < arguments.length; _i++) {
-        children[_i - 1] = arguments[_i];
-    }
-    children.forEach(function (child) { return parent.appendChild(child); });
-    return children[children.length - 1];
+export function after(sibling, child) {
+    sibling.after(child);
+    return child;
 }
-var SELECTOR_REGEX = /([\w\-]+)?(#([\w\-]+))?((.([\w\-]+))*)/;
+export function append(parent, ...children) {
+    parent.append(...children);
+    if (children.length === 1 && typeof children[0] !== 'string') {
+        return children[0];
+    }
+}
+export function prepend(parent, child) {
+    parent.insertBefore(child, parent.firstChild);
+    return child;
+}
+/**
+ * Removes all children from `parent` and appends `children`
+ */
+export function reset(parent, ...children) {
+    parent.innerText = '';
+    append(parent, ...children);
+}
+const SELECTOR_REGEX = /([\w\-]+)?(#([\w\-]+))?((\.([\w\-]+))*)/;
 export var Namespace;
 (function (Namespace) {
     Namespace["HTML"] = "http://www.w3.org/1999/xhtml";
     Namespace["SVG"] = "http://www.w3.org/2000/svg";
 })(Namespace || (Namespace = {}));
-function _$(namespace, description, attrs) {
-    var children = [];
-    for (var _i = 3; _i < arguments.length; _i++) {
-        children[_i - 3] = arguments[_i];
-    }
-    var match = SELECTOR_REGEX.exec(description);
+function _$(namespace, description, attrs, ...children) {
+    const match = SELECTOR_REGEX.exec(description);
     if (!match) {
         throw new Error('Bad use of emmet');
     }
-    attrs = __assign({}, (attrs || {}));
-    var tagName = match[1] || 'div';
-    var result;
+    const tagName = match[1] || 'div';
+    let result;
     if (namespace !== Namespace.HTML) {
         result = document.createElementNS(namespace, tagName);
     }
@@ -912,97 +966,52 @@ function _$(namespace, description, attrs) {
     if (match[4]) {
         result.className = match[4].replace(/\./g, ' ').trim();
     }
-    Object.keys(attrs).forEach(function (name) {
-        var value = attrs[name];
-        if (typeof value === 'undefined') {
-            return;
-        }
-        if (/^on\w+$/.test(name)) {
-            result[name] = value;
-        }
-        else if (name === 'selected') {
-            if (value) {
-                result.setAttribute(name, 'true');
+    if (attrs) {
+        Object.entries(attrs).forEach(([name, value]) => {
+            if (typeof value === 'undefined') {
+                return;
             }
-        }
-        else {
-            result.setAttribute(name, value);
-        }
-    });
-    coalesce(children)
-        .forEach(function (child) {
-        if (child instanceof Node) {
-            result.appendChild(child);
-        }
-        else {
-            result.appendChild(document.createTextNode(child));
-        }
-    });
+            if (/^on\w+$/.test(name)) {
+                result[name] = value;
+            }
+            else if (name === 'selected') {
+                if (value) {
+                    result.setAttribute(name, 'true');
+                }
+            }
+            else {
+                result.setAttribute(name, value);
+            }
+        });
+    }
+    result.append(...children);
     return result;
 }
-export function $(description, attrs) {
-    var children = [];
-    for (var _i = 2; _i < arguments.length; _i++) {
-        children[_i - 2] = arguments[_i];
-    }
-    return _$.apply(void 0, __spreadArrays([Namespace.HTML, description, attrs], children));
+export function $(description, attrs, ...children) {
+    return _$(Namespace.HTML, description, attrs, ...children);
 }
-$.SVG = function (description, attrs) {
-    var children = [];
-    for (var _i = 2; _i < arguments.length; _i++) {
-        children[_i - 2] = arguments[_i];
-    }
-    return _$.apply(void 0, __spreadArrays([Namespace.SVG, description, attrs], children));
+$.SVG = function (description, attrs, ...children) {
+    return _$(Namespace.SVG, description, attrs, ...children);
 };
-export function show() {
-    var elements = [];
-    for (var _i = 0; _i < arguments.length; _i++) {
-        elements[_i] = arguments[_i];
+export function setVisibility(visible, ...elements) {
+    if (visible) {
+        show(...elements);
     }
-    for (var _a = 0, elements_1 = elements; _a < elements_1.length; _a++) {
-        var element = elements_1[_a];
+    else {
+        hide(...elements);
+    }
+}
+export function show(...elements) {
+    for (const element of elements) {
         element.style.display = '';
         element.removeAttribute('aria-hidden');
     }
 }
-export function hide() {
-    var elements = [];
-    for (var _i = 0; _i < arguments.length; _i++) {
-        elements[_i] = arguments[_i];
-    }
-    for (var _a = 0, elements_2 = elements; _a < elements_2.length; _a++) {
-        var element = elements_2[_a];
+export function hide(...elements) {
+    for (const element of elements) {
         element.style.display = 'none';
         element.setAttribute('aria-hidden', 'true');
     }
-}
-function findParentWithAttribute(node, attribute) {
-    while (node && node.nodeType === node.ELEMENT_NODE) {
-        if (node instanceof HTMLElement && node.hasAttribute(attribute)) {
-            return node;
-        }
-        node = node.parentNode;
-    }
-    return null;
-}
-export function removeTabIndexAndUpdateFocus(node) {
-    if (!node || !node.hasAttribute('tabIndex')) {
-        return;
-    }
-    // If we are the currently focused element and tabIndex is removed,
-    // standard DOM behavior is to move focus to the <body> element. We
-    // typically never want that, rather put focus to the closest element
-    // in the hierarchy of the parent DOM nodes.
-    if (document.activeElement === node) {
-        var parentFocusable = findParentWithAttribute(node.parentElement, 'tabIndex');
-        if (parentFocusable) {
-            parentFocusable.focus();
-        }
-    }
-    node.removeAttribute('tabindex');
-}
-export function getElementsByTagName(tag) {
-    return Array.prototype.slice.call(document.getElementsByTagName(tag), 0);
 }
 /**
  * Find a value usable for a dom node size such that the likelihood that it would be
@@ -1012,55 +1021,505 @@ export function getElementsByTagName(tag) {
  * of 1.25, the cursor will be 2.5 screen pixels wide. Depending on how the dom node aligns/"snaps"
  * with the screen pixels, it will sometimes be rendered with 2 screen pixels, and sometimes with 3 screen pixels.
  */
-export function computeScreenAwareSize(cssPx) {
-    var screenPx = window.devicePixelRatio * cssPx;
+export function computeScreenAwareSize(window, cssPx) {
+    const screenPx = window.devicePixelRatio * cssPx;
     return Math.max(1, Math.floor(screenPx)) / window.devicePixelRatio;
 }
 /**
- * See https://github.com/Microsoft/monaco-editor/issues/601
+ * Open safely a new window. This is the best way to do so, but you cannot tell
+ * if the window was opened or if it was blocked by the browser's popup blocker.
+ * If you want to tell if the browser blocked the new window, use {@link windowOpenWithSuccess}.
+ *
+ * See https://github.com/microsoft/monaco-editor/issues/601
  * To protect against malicious code in the linked site, particularly phishing attempts,
  * the window.opener should be set to null to prevent the linked site from having access
  * to change the location of the current page.
  * See https://mathiasbynens.github.io/rel-noopener/
  */
 export function windowOpenNoOpener(url) {
-    if (platform.isNative || browser.isEdgeWebView) {
-        // In VSCode, window.open() always returns null...
-        // The same is true for a WebView (see https://github.com/Microsoft/monaco-editor/issues/628)
-        window.open(url);
-    }
-    else {
-        var newTab = window.open();
-        if (newTab) {
-            newTab.opener = null;
-            newTab.location.href = url;
-        }
-    }
+    // By using 'noopener' in the `windowFeatures` argument, the newly created window will
+    // not be able to use `window.opener` to reach back to the current page.
+    // See https://stackoverflow.com/a/46958731
+    // See https://developer.mozilla.org/en-US/docs/Web/API/Window/open#noopener
+    // However, this also doesn't allow us to realize if the browser blocked
+    // the creation of the window.
+    mainWindow.open(url, '_blank', 'noopener');
 }
-export function animate(fn) {
-    var step = function () {
+export function animate(targetWindow, fn) {
+    const step = () => {
         fn();
-        stepDisposable = scheduleAtNextAnimationFrame(step);
+        stepDisposable = scheduleAtNextAnimationFrame(targetWindow, step);
     };
-    var stepDisposable = scheduleAtNextAnimationFrame(step);
-    return toDisposable(function () { return stepDisposable.dispose(); });
+    let stepDisposable = scheduleAtNextAnimationFrame(targetWindow, step);
+    return toDisposable(() => stepDisposable.dispose());
 }
-RemoteAuthorities.setPreferredWebSchema(/^https:/.test(window.location.href) ? 'https' : 'http');
-export function asDomUri(uri) {
-    if (!uri) {
-        return uri;
-    }
-    if (Schemas.vscodeRemote === uri.scheme) {
-        return RemoteAuthorities.rewrite(uri);
-    }
-    return uri;
-}
+RemoteAuthorities.setPreferredWebSchema(/^https:/.test(mainWindow.location.href) ? 'https' : 'http');
 /**
  * returns url('...')
  */
 export function asCSSUrl(uri) {
     if (!uri) {
-        return "url('')";
+        return `url('')`;
     }
-    return "url('" + asDomUri(uri).toString(true).replace(/'/g, '%27') + "')";
+    return `url('${FileAccess.uriToBrowserUri(uri).toString(true).replace(/'/g, '%27')}')`;
+}
+export function asCSSPropertyValue(value) {
+    return `'${value.replace(/'/g, '%27')}'`;
+}
+export function asCssValueWithDefault(cssPropertyValue, dflt) {
+    if (cssPropertyValue !== undefined) {
+        const variableMatch = cssPropertyValue.match(/^\s*var\((.+)\)$/);
+        if (variableMatch) {
+            const varArguments = variableMatch[1].split(',', 2);
+            if (varArguments.length === 2) {
+                dflt = asCssValueWithDefault(varArguments[1].trim(), dflt);
+            }
+            return `var(${varArguments[0]}, ${dflt})`;
+        }
+        return cssPropertyValue;
+    }
+    return dflt;
+}
+// -- sanitize and trusted html
+/**
+ * Hooks dompurify using `afterSanitizeAttributes` to check that all `href` and `src`
+ * attributes are valid.
+ */
+export function hookDomPurifyHrefAndSrcSanitizer(allowedProtocols, allowDataImages = false) {
+    // https://github.com/cure53/DOMPurify/blob/main/demos/hooks-scheme-allowlist.html
+    // build an anchor to map URLs to
+    const anchor = document.createElement('a');
+    dompurify.addHook('afterSanitizeAttributes', (node) => {
+        // check all href/src attributes for validity
+        for (const attr of ['href', 'src']) {
+            if (node.hasAttribute(attr)) {
+                const attrValue = node.getAttribute(attr);
+                if (attr === 'href' && attrValue.startsWith('#')) {
+                    // Allow fragment links
+                    continue;
+                }
+                anchor.href = attrValue;
+                if (!allowedProtocols.includes(anchor.protocol.replace(/:$/, ''))) {
+                    if (allowDataImages && attr === 'src' && anchor.href.startsWith('data:')) {
+                        continue;
+                    }
+                    node.removeAttribute(attr);
+                }
+            }
+        }
+    });
+    return toDisposable(() => {
+        dompurify.removeHook('afterSanitizeAttributes');
+    });
+}
+/**
+ * List of safe, non-input html tags.
+ */
+export const basicMarkupHtmlTags = Object.freeze([
+    'a',
+    'abbr',
+    'b',
+    'bdo',
+    'blockquote',
+    'br',
+    'caption',
+    'cite',
+    'code',
+    'col',
+    'colgroup',
+    'dd',
+    'del',
+    'details',
+    'dfn',
+    'div',
+    'dl',
+    'dt',
+    'em',
+    'figcaption',
+    'figure',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'i',
+    'img',
+    'input',
+    'ins',
+    'kbd',
+    'label',
+    'li',
+    'mark',
+    'ol',
+    'p',
+    'pre',
+    'q',
+    'rp',
+    'rt',
+    'ruby',
+    'samp',
+    'small',
+    'small',
+    'source',
+    'span',
+    'strike',
+    'strong',
+    'sub',
+    'summary',
+    'sup',
+    'table',
+    'tbody',
+    'td',
+    'tfoot',
+    'th',
+    'thead',
+    'time',
+    'tr',
+    'tt',
+    'u',
+    'ul',
+    'var',
+    'video',
+    'wbr',
+]);
+const defaultDomPurifyConfig = Object.freeze({
+    ALLOWED_TAGS: ['a', 'button', 'blockquote', 'code', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'input', 'label', 'li', 'p', 'pre', 'select', 'small', 'span', 'strong', 'textarea', 'ul', 'ol'],
+    ALLOWED_ATTR: ['href', 'data-href', 'data-command', 'target', 'title', 'name', 'src', 'alt', 'class', 'id', 'role', 'tabindex', 'style', 'data-code', 'width', 'height', 'align', 'x-dispatch', 'required', 'checked', 'placeholder', 'type', 'start'],
+    RETURN_DOM: false,
+    RETURN_DOM_FRAGMENT: false,
+    RETURN_TRUSTED_TYPE: true
+});
+export class ModifierKeyEmitter extends event.Emitter {
+    constructor() {
+        super();
+        this._subscriptions = new DisposableStore();
+        this._keyStatus = {
+            altKey: false,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false
+        };
+        this._subscriptions.add(event.Event.runAndSubscribe(onDidRegisterWindow, ({ window, disposables }) => this.registerListeners(window, disposables), { window: mainWindow, disposables: this._subscriptions }));
+    }
+    registerListeners(window, disposables) {
+        disposables.add(addDisposableListener(window, 'keydown', e => {
+            if (e.defaultPrevented) {
+                return;
+            }
+            const event = new StandardKeyboardEvent(e);
+            // If Alt-key keydown event is repeated, ignore it #112347
+            // Only known to be necessary for Alt-Key at the moment #115810
+            if (event.keyCode === 6 /* KeyCode.Alt */ && e.repeat) {
+                return;
+            }
+            if (e.altKey && !this._keyStatus.altKey) {
+                this._keyStatus.lastKeyPressed = 'alt';
+            }
+            else if (e.ctrlKey && !this._keyStatus.ctrlKey) {
+                this._keyStatus.lastKeyPressed = 'ctrl';
+            }
+            else if (e.metaKey && !this._keyStatus.metaKey) {
+                this._keyStatus.lastKeyPressed = 'meta';
+            }
+            else if (e.shiftKey && !this._keyStatus.shiftKey) {
+                this._keyStatus.lastKeyPressed = 'shift';
+            }
+            else if (event.keyCode !== 6 /* KeyCode.Alt */) {
+                this._keyStatus.lastKeyPressed = undefined;
+            }
+            else {
+                return;
+            }
+            this._keyStatus.altKey = e.altKey;
+            this._keyStatus.ctrlKey = e.ctrlKey;
+            this._keyStatus.metaKey = e.metaKey;
+            this._keyStatus.shiftKey = e.shiftKey;
+            if (this._keyStatus.lastKeyPressed) {
+                this._keyStatus.event = e;
+                this.fire(this._keyStatus);
+            }
+        }, true));
+        disposables.add(addDisposableListener(window, 'keyup', e => {
+            if (e.defaultPrevented) {
+                return;
+            }
+            if (!e.altKey && this._keyStatus.altKey) {
+                this._keyStatus.lastKeyReleased = 'alt';
+            }
+            else if (!e.ctrlKey && this._keyStatus.ctrlKey) {
+                this._keyStatus.lastKeyReleased = 'ctrl';
+            }
+            else if (!e.metaKey && this._keyStatus.metaKey) {
+                this._keyStatus.lastKeyReleased = 'meta';
+            }
+            else if (!e.shiftKey && this._keyStatus.shiftKey) {
+                this._keyStatus.lastKeyReleased = 'shift';
+            }
+            else {
+                this._keyStatus.lastKeyReleased = undefined;
+            }
+            if (this._keyStatus.lastKeyPressed !== this._keyStatus.lastKeyReleased) {
+                this._keyStatus.lastKeyPressed = undefined;
+            }
+            this._keyStatus.altKey = e.altKey;
+            this._keyStatus.ctrlKey = e.ctrlKey;
+            this._keyStatus.metaKey = e.metaKey;
+            this._keyStatus.shiftKey = e.shiftKey;
+            if (this._keyStatus.lastKeyReleased) {
+                this._keyStatus.event = e;
+                this.fire(this._keyStatus);
+            }
+        }, true));
+        disposables.add(addDisposableListener(window.document.body, 'mousedown', () => {
+            this._keyStatus.lastKeyPressed = undefined;
+        }, true));
+        disposables.add(addDisposableListener(window.document.body, 'mouseup', () => {
+            this._keyStatus.lastKeyPressed = undefined;
+        }, true));
+        disposables.add(addDisposableListener(window.document.body, 'mousemove', e => {
+            if (e.buttons) {
+                this._keyStatus.lastKeyPressed = undefined;
+            }
+        }, true));
+        disposables.add(addDisposableListener(window, 'blur', () => {
+            this.resetKeyStatus();
+        }));
+    }
+    get keyStatus() {
+        return this._keyStatus;
+    }
+    /**
+     * Allows to explicitly reset the key status based on more knowledge (#109062)
+     */
+    resetKeyStatus() {
+        this.doResetKeyStatus();
+        this.fire(this._keyStatus);
+    }
+    doResetKeyStatus() {
+        this._keyStatus = {
+            altKey: false,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false
+        };
+    }
+    static getInstance() {
+        if (!ModifierKeyEmitter.instance) {
+            ModifierKeyEmitter.instance = new ModifierKeyEmitter();
+        }
+        return ModifierKeyEmitter.instance;
+    }
+    dispose() {
+        super.dispose();
+        this._subscriptions.dispose();
+    }
+}
+export class DragAndDropObserver extends Disposable {
+    constructor(element, callbacks) {
+        super();
+        this.element = element;
+        this.callbacks = callbacks;
+        // A helper to fix issues with repeated DRAG_ENTER / DRAG_LEAVE
+        // calls see https://github.com/microsoft/vscode/issues/14470
+        // when the element has child elements where the events are fired
+        // repeadedly.
+        this.counter = 0;
+        // Allows to measure the duration of the drag operation.
+        this.dragStartTime = 0;
+        this.registerListeners();
+    }
+    registerListeners() {
+        if (this.callbacks.onDragStart) {
+            this._register(addDisposableListener(this.element, EventType.DRAG_START, (e) => {
+                this.callbacks.onDragStart?.(e);
+            }));
+        }
+        if (this.callbacks.onDrag) {
+            this._register(addDisposableListener(this.element, EventType.DRAG, (e) => {
+                this.callbacks.onDrag?.(e);
+            }));
+        }
+        this._register(addDisposableListener(this.element, EventType.DRAG_ENTER, (e) => {
+            this.counter++;
+            this.dragStartTime = e.timeStamp;
+            this.callbacks.onDragEnter?.(e);
+        }));
+        this._register(addDisposableListener(this.element, EventType.DRAG_OVER, (e) => {
+            e.preventDefault(); // needed so that the drop event fires (https://stackoverflow.com/questions/21339924/drop-event-not-firing-in-chrome)
+            this.callbacks.onDragOver?.(e, e.timeStamp - this.dragStartTime);
+        }));
+        this._register(addDisposableListener(this.element, EventType.DRAG_LEAVE, (e) => {
+            this.counter--;
+            if (this.counter === 0) {
+                this.dragStartTime = 0;
+                this.callbacks.onDragLeave?.(e);
+            }
+        }));
+        this._register(addDisposableListener(this.element, EventType.DRAG_END, (e) => {
+            this.counter = 0;
+            this.dragStartTime = 0;
+            this.callbacks.onDragEnd?.(e);
+        }));
+        this._register(addDisposableListener(this.element, EventType.DROP, (e) => {
+            this.counter = 0;
+            this.dragStartTime = 0;
+            this.callbacks.onDrop?.(e);
+        }));
+    }
+}
+const H_REGEX = /(?<tag>[\w\-]+)?(?:#(?<id>[\w\-]+))?(?<class>(?:\.(?:[\w\-]+))*)(?:@(?<name>(?:[\w\_])+))?/;
+export function h(tag, ...args) {
+    let attributes;
+    let children;
+    if (Array.isArray(args[0])) {
+        attributes = {};
+        children = args[0];
+    }
+    else {
+        attributes = args[0] || {};
+        children = args[1];
+    }
+    const match = H_REGEX.exec(tag);
+    if (!match || !match.groups) {
+        throw new Error('Bad use of h');
+    }
+    const tagName = match.groups['tag'] || 'div';
+    const el = document.createElement(tagName);
+    if (match.groups['id']) {
+        el.id = match.groups['id'];
+    }
+    const classNames = [];
+    if (match.groups['class']) {
+        for (const className of match.groups['class'].split('.')) {
+            if (className !== '') {
+                classNames.push(className);
+            }
+        }
+    }
+    if (attributes.className !== undefined) {
+        for (const className of attributes.className.split('.')) {
+            if (className !== '') {
+                classNames.push(className);
+            }
+        }
+    }
+    if (classNames.length > 0) {
+        el.className = classNames.join(' ');
+    }
+    const result = {};
+    if (match.groups['name']) {
+        result[match.groups['name']] = el;
+    }
+    if (children) {
+        for (const c of children) {
+            if (isHTMLElement(c)) {
+                el.appendChild(c);
+            }
+            else if (typeof c === 'string') {
+                el.append(c);
+            }
+            else if ('root' in c) {
+                Object.assign(result, c);
+                el.appendChild(c.root);
+            }
+        }
+    }
+    for (const [key, value] of Object.entries(attributes)) {
+        if (key === 'className') {
+            continue;
+        }
+        else if (key === 'style') {
+            for (const [cssKey, cssValue] of Object.entries(value)) {
+                el.style.setProperty(camelCaseToHyphenCase(cssKey), typeof cssValue === 'number' ? cssValue + 'px' : '' + cssValue);
+            }
+        }
+        else if (key === 'tabIndex') {
+            el.tabIndex = value;
+        }
+        else {
+            el.setAttribute(camelCaseToHyphenCase(key), value.toString());
+        }
+    }
+    result['root'] = el;
+    return result;
+}
+export function svgElem(tag, ...args) {
+    let attributes;
+    let children;
+    if (Array.isArray(args[0])) {
+        attributes = {};
+        children = args[0];
+    }
+    else {
+        attributes = args[0] || {};
+        children = args[1];
+    }
+    const match = H_REGEX.exec(tag);
+    if (!match || !match.groups) {
+        throw new Error('Bad use of h');
+    }
+    const tagName = match.groups['tag'] || 'div';
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+    if (match.groups['id']) {
+        el.id = match.groups['id'];
+    }
+    const classNames = [];
+    if (match.groups['class']) {
+        for (const className of match.groups['class'].split('.')) {
+            if (className !== '') {
+                classNames.push(className);
+            }
+        }
+    }
+    if (attributes.className !== undefined) {
+        for (const className of attributes.className.split('.')) {
+            if (className !== '') {
+                classNames.push(className);
+            }
+        }
+    }
+    if (classNames.length > 0) {
+        el.className = classNames.join(' ');
+    }
+    const result = {};
+    if (match.groups['name']) {
+        result[match.groups['name']] = el;
+    }
+    if (children) {
+        for (const c of children) {
+            if (isHTMLElement(c)) {
+                el.appendChild(c);
+            }
+            else if (typeof c === 'string') {
+                el.append(c);
+            }
+            else if ('root' in c) {
+                Object.assign(result, c);
+                el.appendChild(c.root);
+            }
+        }
+    }
+    for (const [key, value] of Object.entries(attributes)) {
+        if (key === 'className') {
+            continue;
+        }
+        else if (key === 'style') {
+            for (const [cssKey, cssValue] of Object.entries(value)) {
+                el.style.setProperty(camelCaseToHyphenCase(cssKey), typeof cssValue === 'number' ? cssValue + 'px' : '' + cssValue);
+            }
+        }
+        else if (key === 'tabIndex') {
+            el.tabIndex = value;
+        }
+        else {
+            el.setAttribute(camelCaseToHyphenCase(key), value.toString());
+        }
+    }
+    result['root'] = el;
+    return result;
+}
+function camelCaseToHyphenCase(str) {
+    return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }

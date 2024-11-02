@@ -1,5 +1,6 @@
+import { Mimes } from '../common/mime.js';
 // Common data transfers
-export var DataTransfers = {
+export const DataTransfers = {
     /**
      * Application specific resource transfer type
      */
@@ -15,21 +16,11 @@ export var DataTransfers = {
     /**
      * Typically transfer type for copy/paste transfers.
      */
-    TEXT: 'text/plain'
-};
-var DragAndDropData = /** @class */ (function () {
-    function DragAndDropData(data) {
-        this.data = data;
-    }
-    DragAndDropData.prototype.update = function () {
-        // noop
-    };
-    DragAndDropData.prototype.getData = function () {
-        return this.data;
-    };
-    return DragAndDropData;
-}());
-export { DragAndDropData };
-export var StaticDND = {
-    CurrentDragAndDropData: undefined
+    TEXT: Mimes.text,
+    /**
+     * Internal type used to pass around text/uri-list data.
+     *
+     * This is needed to work around https://bugs.chromium.org/p/chromium/issues/detail?id=239745.
+     */
+    INTERNAL_URI_LIST: 'application/vnd.code.uri-list',
 };
