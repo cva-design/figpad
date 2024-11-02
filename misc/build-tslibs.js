@@ -6,7 +6,7 @@ const Path = require("path")
 const prog = Path.relative(process.cwd(), __filename)
 const outdir = (
   process.argv.length > 2 ? Path.resolve(".", process.argv[2]) :
-  "docs"
+    "docs"
 )
 
 const origwd = process.cwd()
@@ -18,11 +18,11 @@ let s = ""
 
 // dom lib
 s = readfile("node_modules/typescript/lib/lib.dom.d.ts") + "\n" +
-    readfile("node_modules/typescript/lib/lib.dom.iterable.d.ts")
+  readfile("node_modules/typescript/lib/lib.dom.iterable.d.ts")
 
 s = 'declare global { namespace WebDOM {\n' +
-    s.replace(/declare\s+|\/\/\/\s*<reference[^\r\n]+/g, "") + "\n" +
-    "}} // global namespace WebDOM\n"
+  s.replace(/declare\s+|\/\/\/\s*<reference[^\r\n]+/g, "") + "\n" +
+  "}} // global namespace WebDOM\n"
 
 addlib("dom", "lib.dom.d.ts", s)
 
@@ -31,8 +31,8 @@ addlib("dom", "lib.dom.d.ts", s)
 s = readfile("node_modules/typescript/lib/lib.webworker.d.ts")
 
 s = 'declare global { namespace WebWorkerEnv {\n' +
-    s.replace(/declare\s+|\/\/\/\s*<reference[^\r\n]+/g, "") + "\n" +
-    "}} // global namespace WebWorkerEnv\n"
+  s.replace(/declare\s+|\/\/\/\s*<reference[^\r\n]+/g, "") + "\n" +
+  "}} // global namespace WebWorkerEnv\n"
 
 addlib("webworker", "lib.webworker.d.ts", s)
 
@@ -80,7 +80,7 @@ function readfile(filename) {
 }
 
 function writefileIfDifferent(filename, content) {
-  if (readfile(filename) != content) {
+  if (!fs.existsSync(filename) || readfile(filename) !== content) {
     writefile(filename, content)
   }
 }
