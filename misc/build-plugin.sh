@@ -2,7 +2,7 @@
 cd "$(dirname "$0")/.."
 source misc/util.sh
 
-figplug=./node_modules/.bin/figplug
+figplug=./bin/figplug
 # figplug=$HOME/src/figplug/bin/figplug.g
 
 node ./misc/build-scriptenv.js
