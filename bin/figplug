@@ -1,0 +1,18 @@
+#!/bin/sh
+basedir=$(dirname "$(echo "$0" | sed -e 's,\\,/,g')")
+
+case `uname` in
+    *CYGWIN*) basedir=`cygpath -w "$basedir"`;;
+esac
+
+if [ -z "$NODE_PATH" ]; then
+  export NODE_PATH="/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules/figplug/bin/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules/figplug/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/node_modules"
+else
+  export NODE_PATH="/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules/figplug/bin/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules/figplug/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/figplug@0.1.20/node_modules:/work/cva/oss/scripter/node_modules/.pnpm/node_modules:$NODE_PATH"
+fi
+
+# Set TSC_NONPOLLING_WATCHER environment variable
+export TSC_NONPOLLING_WATCHER=1
+
+# Execute figplug
+exec node "./node_modules/figplug/bin/figplug" "$@"

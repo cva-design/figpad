@@ -296,7 +296,7 @@ export class FetchRequest implements Request {
     this.redirect = p.redirect || "follow"
     this.referrer = p.referrer || "about:scripter"
     this.referrerPolicy = p.referrerPolicy || ""
-    this.signal = new FetchAbortSignal() as AbortSignal
+    this.signal = new FetchAbortSignal() as unknown as AbortSignal
   }
 
 
