@@ -5,7 +5,7 @@ source misc/util.sh
 figplug=./bin/figplug
 # figplug=$HOME/src/figplug/bin/figplug.g
 
-node ./misc/build-scriptenv.js
+nr build:scriptenv
 
 if [ "$1" == "-dev" ]; then
   echo "building figma-plugin in debug mode"

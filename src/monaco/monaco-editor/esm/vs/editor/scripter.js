@@ -1,19 +1,18 @@
 // copied to ./monaco-editor/esm/vs/editor/scripter.js by misc/update-monaco.sh
-import { StaticServices, StandaloneUriLabelService } from './standalone/browser/standaloneServices'
+import { StandaloneServices } from './standalone/browser/standaloneServices.js'
 import {
-  StandaloneEditorModelResolverService,
-} from './standalone/browser/standaloneCodeEditorService'
-
+  ICodeEditorService
+} from './browser/services/codeEditorService.js'
+import { ILabelService } from '../platform/label/common/label.js'
 
 function patchEditorService(openCodeEditor) {
-  const codeEditorService = StaticServices.codeEditorService.get();
-  codeEditorService.openCodeEditor = openCodeEditor
+  StandaloneServices.get(ICodeEditorService).openCodeEditor = openCodeEditor
 }
 
 
 function patchEditorModelResolverService(findModel) {
   // https://github.com/Microsoft/monaco-editor/issues/779#issuecomment-374258435
-  StandaloneEditorModelResolverService.prototype.findModel = findModel
+  StandaloneServices.get(ICodeEditorService).findModel = findModel
 }
 
 
@@ -34,7 +33,7 @@ export function getBaseLabel(resource) {
 function patchUriLabelService(getUriLabel) {
   // returns a label for a resource.
   // Shows up as a tool tip and small text next to the filename
-  StandaloneUriLabelService.prototype.getUriLabel = getUriLabel
+  StandaloneServices.get(ILabelService).getUriLabel = getUriLabel
 }
 
 

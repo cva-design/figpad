@@ -68,7 +68,7 @@ ln -s $(ls -d "../../docs/zip") zip
 popd >/dev/null
 
 # figma-plugin
-node misc/build-scriptenv.js
+nr build:scriptenv
 $figplug build -v -g -w src/figma-plugin:build/figma-plugin &
 pids+=( $! )
 

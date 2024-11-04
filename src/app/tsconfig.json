@@ -8,13 +8,12 @@
     "lib": [
       "es2017",
       "dom"
-    ]
+    ],
+    "paths": {
+    }
   },
-  // "exclude": [
-  //   "monaco-editor"
-  // ],
   "include": [
-    "global.d.ts",
+    "code/global.d.ts",
     "../monaco-editor/monaco.d.ts"
   ]
 }

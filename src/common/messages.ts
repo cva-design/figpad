@@ -1,4 +1,4 @@
-import { scriptenv } from "../figma-plugin/scriptenv"
+import type { scriptenv } from "../figma-plugin/scriptenv"
 
 export interface SourcePos {
   line   :number

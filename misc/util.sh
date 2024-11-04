@@ -24,7 +24,8 @@ spawn_monaco_build() {
 
   # build monaco if needed
   if ! [ -d "$monaco_build_dir" ] || has_newer "src/monaco" "$monaco_build_dir/monaco.js"; then
-    bash misc/build-monaco.sh "$outdir" &
+    # bash misc/build-monaco.sh "$outdir" &
+    nr build:monaco "$outdir" &
     return $!
   fi
 

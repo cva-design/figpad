@@ -1,6 +1,7 @@
 {
   "name": "monaco-editor",
   "version": "0.52.0",
+  "type": "module",
   "vscodeRef": "493330cdc6475247184ea459c66776c3da12cd2d",
   "private": false,
   "description": "A browser based code editor",

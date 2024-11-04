@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <link href="https://rsms.me/inter/inter.css" rel="stylesheet">
-  <link href="res/iaw.css?v=${BUILD_VERSION}" rel="stylesheet">
-  <link href="res/jbmono.css?v=${BUILD_VERSION}" rel="stylesheet">
-  <link href="monaco-${MONACO_VERSION}/monaco.css" rel="stylesheet">
-  <link rel="shortcut icon" href="/icon.png?v=${BUILD_VERSION}">
-  <link rel="icon" type="image/png" sizes="any" href="/icon.png?v=${BUILD_VERSION}">
+  <link href="./assets/fonts/iaw.css" rel="stylesheet">
+  <link href="./assets/fonts/jbmono.css" rel="stylesheet">
+  <link href="./generated/monaco-{{MONACO_VERSION}}/monaco.css" rel="stylesheet">
+  <link rel="shortcut icon" href="./icon.png">
+  <link rel="icon" type="image/png" sizes="any" href="./icon.png">
+  <script type="module" src="./code/resources.ts"></script>
 </head>
 <body>
   <div id="main">
@@ -33,6 +34,7 @@
     <div class="button run hidden"></div>
   </div>
   <div id="main-progress-spinner"><div class="progress-spinner"></div></div>
-  <script type="text/javascript" src="monaco-${MONACO_VERSION}/monaco.js?x"></script>
+  <script type="module" src="./generated/monaco-{{MONACO_VERSION}}/monaco.js"></script>
+  <script type="module" src="./code/app.ts"></script>
 </body>
 </html>

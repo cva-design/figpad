@@ -1,5 +1,9 @@
-const fs = require("fs")
-const Path = require("path")
+import { readFileSync } from 'node:fs'
+import { basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // special value object property that is used for a code comment for the
 // generated line.
@@ -8,22 +12,22 @@ const kComment = Symbol("comment")
 // ANY represents "any byte"
 const ANY = 0x100
 
-var hadErrors = false
+let hadErrors = false
 
-function err() {
+function err(...args) {
   hadErrors = true
-  console.error.apply(console, Array.prototype.slice.call(arguments))
+  console.error(...args)
 }
 
 const infoMap = new Map()
 const inputMap = new Map()  // headerBytes => info
 
 function internInfo(headerBytes, info) {
-  let e = infoMap.get(info.type)
+  const e = infoMap.get(info.type)
   if (e) {
     e.headerBytes.add(headerBytes)
-    for (let k in info) {
-      let v = info[k]
+    for (const k in info) {
+      const v = info[k]
       if (v === undefined || v === null) {
         continue
       }
@@ -38,16 +42,16 @@ function internInfo(headerBytes, info) {
   return info
 }
 
-fs.readFileSync(__dirname + "/file-types.txt", "utf8").trim().split(/[\r\n]+/).forEach(line => {
-  line = line.trim().replace(/;.*$/g, "").trim()
-  if (line == "") {
-    return
+for (const line of readFileSync(`${__dirname}/file-types.txt`, "utf8").trim().split(/[\r\n]+/)) {
+  const trimmedLine = line.trim().replace(/;.*$/g, "").trim()
+  if (trimmedLine === "") {
+    continue
   }
 
   // parse line
-  let [header, type, extsStr, description] = line.split(/\s*\|\s*/)
-  if (!header) { return err(`invalid line ${JSON.stringify(line)}: missing header`) }
-  if (!type) { return err(`invalid line ${JSON.stringify(line)}: missing type`) }
+  const [header, type, extsStr, description] = trimmedLine.split(/\s*\|\s*/)
+  if (!header) { err(`invalid line ${JSON.stringify(line)}: missing header`); continue }
+  if (!type) { err(`invalid line ${JSON.stringify(line)}: missing type`); continue }
 
   let exts = []
   if (extsStr) {
@@ -56,14 +60,14 @@ fs.readFileSync(__dirname + "/file-types.txt", "utf8").trim().split(/[\r\n]+/).f
   }
 
   // make headerBytes (key)
-  let headerBytes = header.split(/\s+/).map(s => {
-    if (s == "*" || s == "**") {
+  const headerBytes = header.split(/\s+/).map(s => {
+    if (s === "*" || s === "**") {
       return ANY
     }
-    return parseInt(s, 16)
+    return Number.parseInt(s, 16)
   })
 
-  let info = internInfo(headerBytes, {
+  const info = internInfo(headerBytes, {
     type,
     exts,
     description,
@@ -92,7 +96,7 @@ class ConstData {
   }
 
   getInitJS(leader, trailer) {
-    if (this.bytes.length == 0) {
+    if (this.bytes.length === 0) {
       return ""
     }
     let bytesStr = ''
@@ -103,14 +107,10 @@ class ConstData {
         lineStart = bytesStr.length
         bytesStr += '\n  '
       }
-      bytesStr = bytesStr ? bytesStr + ',' + s : s
+      bytesStr = bytesStr ? `${bytesStr},${s}` : s
     }
     return (
-      leader +
-      `const ${this.name} = new Uint8Array([` +
-        `${lineStart == 0 ? '' : '\n  '}${bytesStr}` +
-      `]);` +
-      trailer
+      `${leader}const ${this.name} = new Uint8Array([${lineStart === 0 ? '' : '\n  '}${bytesStr}]);${trailer}`
     )
   }
 }
@@ -125,8 +125,10 @@ class JSRef {
 
 
 function bytecmp(a /*:ArrayLike<byte>*/, b /*:ArrayLike<byte>*/) /*:int*/ {
-  const aL = a.length, bL = b.length, L = (aL < bL ? aL : bL)
-  for (let i = 0; i != L; ++i) {
+  const aL = a.length
+  const bL = b.length
+  const L = (aL < bL ? aL : bL)
+  for (let i = 0; i !== L; ++i) {
     if (a[i] < b[i]) { return -1 }
     if (b[i] < a[i]) { return 1 }
   }
@@ -140,32 +142,32 @@ function bytecmp(a /*:ArrayLike<byte>*/, b /*:ArrayLike<byte>*/) /*:int*/ {
 
 function fmtjs(obj) {
   // this is slow, but we don't care
-  if (obj && typeof obj == "object") {
+  if (obj && typeof obj === "object") {
     if (obj instanceof JSRef) {
       return obj.name
     }
     if (Array.isArray(obj)) {
-      return "[" + obj.map(v => fmtjs(v)).join(",") + "]"
+      return `[${obj.map(v => fmtjs(v)).join(",")}]`
     }
     let s = "{"
-    for (let k of Object.keys(obj)) {
-      let v = obj[k]
+    for (const k of Object.keys(obj)) {
+      const v = obj[k]
       if (v === undefined) {
         continue
       }
       try {
-        if (k.replace(/[\s\r\n\t]+/g,"") != k) {
+        if (k.replace(/[\s\r\n\t]+/g,"") !== k) {
           throw 1
         }
-        ;(0,eval)(`let x = {${k}:1}`)
+        new Function(`let x = {${k}:1}`)
         s += k
       } catch (_) {
         s += JSON.stringify(k)
       }
       s += `:${fmtjs(v)},`
     }
-    if (s[s.length-1] == ",") {
-      s = s.substr(0, s.length-1)
+    if (s[s.length-1] === ",") {
+      s = s.slice(0, -1)
     }
     s += "}"
     return s
@@ -177,15 +179,15 @@ function fmtjs(obj) {
 let nextVarId = 0
 
 function extractValues(inputMap /*Map*/) {  // [vars[], map2]
-  let refmap = new Map()  // val => ref
-  let map2 = new Map()
-  let vars = []
-  for (let [k, v] of inputMap.entries()) {
+  const refmap = new Map()  // val => ref
+  const map2 = new Map()
+  const vars = []
+  for (const [k, v] of inputMap.entries()) {
     let ref = refmap.get(v)
     if (!ref) {
-      let varname = `v${(nextVarId++).toString(36)}`
+      const varname = `v${(nextVarId++).toString(36)}`
       ref = new JSRef(varname, v)
-      vars.push(`${varname} = ` + fmtjs(v))
+      vars.push(`${varname} = ${fmtjs(v)}`)
       refmap.set(v, ref)
     }
     map2.set(k, ref)
@@ -200,7 +202,7 @@ function genBTree(cdat /*ConstData*/, m /*Map*/) {
   const indentation = '  '
   const pairs = []
   const sortedKeys = Array.from(m.keys())
-  if (typeof sortedKeys[0] == "string") {
+  if (typeof sortedKeys[0] === "string") {
     // string keys. use built-in sort function
     sortedKeys.sort()
   } else {
@@ -214,9 +216,11 @@ function genBTree(cdat /*ConstData*/, m /*Map*/) {
   }
 
   const genBranch = (pairs, indent) => {
-    let pair, leftPairs, rightPairs
+    let pair
+    let leftPairs
+    let rightPairs
 
-    if (pairs.length == 1) {
+    if (pairs.length === 1) {
       pair = pairs[0]
     } else {
       const midIndex = Math.floor(pairs.length / 2)-1
@@ -225,8 +229,8 @@ function genBTree(cdat /*ConstData*/, m /*Map*/) {
       rightPairs = pairs.slice(midIndex + 1)
     }
 
-    let k = pair.key
-    let v = pair.value
+    const k = pair.key
+    const v = pair.value
 
     // let val = v instanceof JSRef ? v.value : v
     // let comment = val[kComment]
@@ -240,19 +244,19 @@ function genBTree(cdat /*ConstData*/, m /*Map*/) {
     // let s = `{ k: ${cdat.alloc(strbytes(k))}, v: ${fmtjs(v)},${comment}`
     let s = `{ k: ${fmtjs(strbytes(k))}, v: ${fmtjs(v)},${comment}`
 
-    if (leftPairs && leftPairs.length) {
+    if (leftPairs?.length) {
       s += `\n${indent}  L:${genBranch(leftPairs, indent + indentation)},`
     }
-    if (rightPairs && rightPairs.length) {
+    if (rightPairs?.length) {
       s += `\n${indent}  R:${genBranch(rightPairs, indent + indentation)},`
     }
-    if (s[s.length-2] == "}" && s[s.length-1] == ",") {
-      s = s.substr(0, s.length-1) + "}"
+    if (s[s.length-2] === "}" && s[s.length-1] === ",") {
+      s = `${s.slice(0, -1)}}`
     } else if (!comment) {
-      if (s[s.length-1] == ",") {
-        s = s.substr(0, s.length-1) + "}"
+      if (s[s.length-1] === ",") {
+        s = `${s.slice(0, -1)}}`
       } else {
-        s += `}`
+        s += '}'
       }
     } else {
       s += `\n${indent}}`
@@ -269,11 +273,11 @@ function strbytes(s) {
 
 function makeExtMap(m) {  // : [k,v][]
   // create mappings from ext => info
-  let extMap = {}
-  for (let [k, v] of m.entries()) {
-    let info = v instanceof JSRef ? v.value : v
-    if (info.exts) for (let ext of info.exts) {
-      let existing = extMap[ext]
+  const extMap = {}
+  for (const [k, v] of m.entries()) {
+    const info = v instanceof JSRef ? v.value : v
+    if (info.exts) for (const ext of info.exts) {
+      const existing = extMap[ext]
       if (existing) {
         existing.add(v)
       } else {
@@ -291,18 +295,18 @@ const btreeJs = genBTree(cdat, inputMapWithRefs)
 const extMap = makeExtMap(inputMapWithRefs)
 
 console.log(
-  "// generated by " + Path.basename(__dirname) + "/" + Path.basename(__filename) + "\n" +
+  `// generated by ${basename(__dirname)}/${basename(__filename)}\n` +
   "const [fileHeaders, fileExts] = (" +
   "function() :[BTree<FileTypeInfo>,Map<string,FileTypeInfo[]>] {\n" +
   "  const " + vars.join(",\n        ") + ";\n" +
      cdat.getInitJS('  ', '\n') +
   '  const headers = new BTree<FileTypeInfo>(\n' +
   '    ' + btreeJs.replace(/\n/g, "\n  ") + ')\n' +
-  `  const exts = new Map<string,FileTypeInfo[]>([\n` +
+  '  const exts = new Map<string,FileTypeInfo[]>([\n' +
   '    ' + extMap.map(v => fmtjs(v)).join(",\n    ") + "\n" +
-  `  ]);\n` +
-  `  return [headers, exts]\n` +
-  `})()`
+  '  ]);\n' +
+  '  return [headers, exts]\n' +
+  '})()'
 )
 
 if (hadErrors) {

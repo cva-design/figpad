@@ -26,10 +26,11 @@ fi
 
 if [[ docs/jsdom.js -nt src/app/jsdom_info.ts ]]; then
   node <<__JS > src/app/jsdom_info.ts
-const crypto = require("crypto")
-const fs = require("fs")
-const hash = crypto.createHash("sha1")
-const input = fs.createReadStream("docs/jsdom.js")
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+
+const hash = createHash("sha1")
+const input = createReadStream("docs/jsdom.js")
 input.on("readable", () => {
   const data = input.read()
   if (data) {

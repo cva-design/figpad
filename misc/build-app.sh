@@ -12,9 +12,12 @@ spawn_monaco_build "$rootdir/docs" && echo "monaco is up-to-date" || true
 
 bash misc/build-app.pre.sh "docs"
 
-echo "building ./src/app -> ./docs"
+echo; echo
+echo "## Building ./src/app -> ./docs"
+echo "###########################################"
+
 pushd src/app > /dev/null
-webpack --mode=production --progress --display=errors-only "--output-path=$rootdir/docs"
+vite build
 
 wait
 popd > /dev/null

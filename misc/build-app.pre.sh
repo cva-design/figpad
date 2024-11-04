@@ -6,6 +6,14 @@ if [[ "$1" != "" ]]; then outdir=$1 ; fi
 
 mkdir -p "$outdir"
 
-node misc/build-tslibs.js "$outdir" &
-node misc/build-worker-template.js
+echo
+echo "## Building tslibs"
+echo "###########################################"
+nr build:tslibs docs
+
+echo; echo
+echo "## Building worker"
+echo "###########################################"
+nr build:worker
+
 wait
