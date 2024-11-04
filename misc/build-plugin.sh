@@ -22,6 +22,6 @@ GITREV=$(git rev-parse HEAD)
 node <<_JS_
 let fs = require("fs")
 let s = fs.readFileSync("build/figma-plugin/ui.html", "utf8")
-s = s.replace(/(src="https:\\/\\/scripter\\.rsms\\.me\\/\?v=)([^"&]+)/g, "\$1$GITREV")
+s = s.replace(/(src="https:\\/\\/figpad\\.rsms\\.me\\/\?v=)([^"&]+)/g, "\$1$GITREV")
 fs.writeFileSync("build/figma-plugin/ui.html", s, "utf8")
 _JS_

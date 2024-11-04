@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 import * as ts from './lib/typescriptServices.js';
-import { lib_dts, lib_dts as lib_es6_dts } from './lib/scripter.js';
+import { lib_dts, lib_dts as lib_es6_dts } from './lib/figpad.js';
 var DEFAULT_LIB = {
     NAME: 'defaultLib:lib.d.ts',
     CONTENTS: lib_dts

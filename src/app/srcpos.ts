@@ -14,7 +14,7 @@ export async function resolveOrigSourcePos(
     "lib/mappings.wasm": "source-map-" + SOURCE_MAP_VERSION + "-mappings.wasm",
   })
 
-  // scripter:1.ts -> scripter:1.js
+  // figpad:1.ts -> figpad:1.js
   let map1 = JSON.parse(sourceMapJSON)
   // map1.file = "script.js"
   // map1.sources = ["script.ts"]

@@ -176,7 +176,7 @@ class ToolbarUI {
         if (editor.currentScript.id >= 0) {
           // Note: Example scripts (id<0) can't be saved since they have no GUID and
           // they can not be edited (i.e. given a guid.) Plus, it makes no sense to save
-          // an example script as it's always available in Scripter.
+          // an example script as it's always available in Figpad.
           saveButtonAvailable = !savedScripts.hasGUID(editor.currentScript.guid)
         }
       }

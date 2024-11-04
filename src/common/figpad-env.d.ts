@@ -1,5 +1,5 @@
 //
-// The Scripter environment.
+// The Figpad environment.
 //
 // What's declared here is available to scripts in their global namespace.
 //
@@ -175,68 +175,68 @@ function alert(message: string): void;
 // ------------------------------------------------------------------------------------
 // worker
 
-/** Data that can be moved from Scripter to a worker */
-type ScripterTransferable = ArrayBuffer;
+/** Data that can be moved from Figpad to a worker */
+type FigpadTransferable = ArrayBuffer;
 
 /** Create a worker */
-function createWorker(scriptOrURL :string | ScripterWorkerFun) :ScripterWorker
+function createWorker(scriptOrURL :string | FigpadWorkerFun) :FigpadWorker
 
 /** Create a iframe-based worker, with a full DOM */
 function createWorker(
-  opt :ScripterCreateWorkerOptions & { iframe: ScripterWorkerIframeConfig & {visible:true} },
-  scriptOrURL :string | ScripterWorkerDOMFun
-) :ScripterWindowedWorker
+  opt :FigpadCreateWorkerOptions & { iframe: FigpadWorkerIframeConfig & {visible:true} },
+  scriptOrURL :string | FigpadWorkerDOMFun
+) :FigpadWindowedWorker
 
 /** Create an iframe-based worker, with a full DOM */
 function createWorker(
-  opt :ScripterCreateWorkerOptions & { iframe: (ScripterWorkerIframeConfig & {visible?:false}) | true },
-  scriptOrURL :string | ScripterWorkerDOMFun
-) :ScripterWorker
+  opt :FigpadCreateWorkerOptions & { iframe: (FigpadWorkerIframeConfig & {visible?:false}) | true },
+  scriptOrURL :string | FigpadWorkerDOMFun
+) :FigpadWorker
 
 /** Create a worker, with options */
 function createWorker(
-  opt :ScripterCreateWorkerOptions | undefined | null,
-  scriptOrURL :string | ScripterWorkerFun
-) :ScripterWorker
+  opt :FigpadCreateWorkerOptions | undefined | null,
+  scriptOrURL :string | FigpadWorkerFun
+) :FigpadWorker
 
 /**
  * Create an iframe-based worker in a visible window.
  * Equivalent to createWorker({iframe:{visible:true,...opt}},scriptOrURL)
  */
 function createWindow(
-  opt :(ScripterWorkerIframeConfig & { visible?: never }) | undefined | null,
-  scriptOrURL :string | ScripterWorkerDOMFun
-) :ScripterWindowedWorker
+  opt :(FigpadWorkerIframeConfig & { visible?: never }) | undefined | null,
+  scriptOrURL :string | FigpadWorkerDOMFun
+) :FigpadWindowedWorker
 
 /**
  * Create an iframe-based worker in a visible window.
  * Equivalent to createWorker({iframe:{visible:true,...opt}},scriptOrURL)
  */
-function createWindow(scriptOrURL :string | ScripterWorkerDOMFun) :ScripterWindowedWorker
+function createWindow(scriptOrURL :string | FigpadWorkerDOMFun) :FigpadWindowedWorker
 
 
 /** Interface to a worker */
-interface ScripterWorker extends Promise<void> {
+interface FigpadWorker extends Promise<void> {
   /** Event callback invoked when a message arrives from the worker */
-  onmessage? :((ev :ScripterMessageEvent)=>void) | null
+  onmessage? :((ev :FigpadMessageEvent)=>void) | null
 
   /** Event callback invoked when a message error occurs */
-  onmessageerror? :((ev :ScripterMessageEvent)=>void) | null
+  onmessageerror? :((ev :FigpadMessageEvent)=>void) | null
 
   /**
    * Event callback invoked when an error occurs.
    * When this happens, the worker should be considered defunct.
    */
-  onerror? :((err :ScripterWorkerError)=>void) | null
+  onerror? :((err :FigpadWorkerError)=>void) | null
 
   /** Event callback invoked when the worker closes */
   onclose? :()=>void
 
   /** Send a message to the worker */
-  postMessage(msg :any, transfer?: ScripterTransferable[]) :void
+  postMessage(msg :any, transfer?: FigpadTransferable[]) :void
 
   /** Send a message to the worker (alias for postMessage) */
-  send<T=any>(msg :T, transfer?: ScripterTransferable[]) :void  // alias for postMessage
+  send<T=any>(msg :T, transfer?: FigpadTransferable[]) :void  // alias for postMessage
 
   /**
    * Receive a message from the worker. Resolves on the next message received.
@@ -256,7 +256,7 @@ interface ScripterWorker extends Promise<void> {
    */
   request<InT=any,OutT=any>(
     msg :InT,
-    transfer?: ScripterTransferable[],
+    transfer?: FigpadTransferable[],
     timeout? :number,
   ) :Promise<OutT>
 
@@ -266,37 +266,37 @@ interface ScripterWorker extends Promise<void> {
   terminate() :this
 }
 
-interface ScripterWindowedWorker extends ScripterWorker {
+interface FigpadWindowedWorker extends FigpadWorker {
   /** Move and resize the window */
   setFrame(x :number, y :number, width :number, height :number) :void
 
-  /** Close the window. Alias for ScripterWorker.terminate() */
+  /** Close the window. Alias for FigpadWorker.terminate() */
   close() :void
 }
 
-interface ScripterCreateWorkerOptions {
+interface FigpadCreateWorkerOptions {
   /**
    * If true, the worker will actually run in an iframe with a full DOM.
    * Note that iframes are a little slower and blocks the UI thread.
    * This is useful for making certain libraries work which depend on DOM features,
    * like for example the popular D3 library.
    */
-  iframe?: ScripterWorkerIframeConfig | boolean | null
+  iframe?: FigpadWorkerIframeConfig | boolean | null
 }
 
-type ScripterWorkerFun = (self :ScripterWorkerEnv) => void|Promise<void>
-type ScripterWorkerDOMFun = (self :ScripterWorkerDOMEnv) => void|Promise<void>
+type FigpadWorkerFun = (self :FigpadWorkerEnv) => void|Promise<void>
+type FigpadWorkerDOMFun = (self :FigpadWorkerDOMEnv) => void|Promise<void>
 
 type WebDOMInterface = typeof WebDOM
 type WebWorkerEnvInterface = typeof WebWorkerEnv
 
-// type ScripterWorkerDOMEnv = ScripterWorkerBaseEnv & WebDOMInterface
-// type ScripterWorkerEnv = ScripterWorkerBaseEnv & WebWorkerEnvInterface
+// type FigpadWorkerDOMEnv = FigpadWorkerBaseEnv & WebDOMInterface
+// type FigpadWorkerEnv = FigpadWorkerBaseEnv & WebWorkerEnvInterface
 
-interface ScripterWorkerEnv extends ScripterWorkerBaseEnv, WebWorkerEnvInterface {
+interface FigpadWorkerEnv extends FigpadWorkerBaseEnv, WebWorkerEnvInterface {
 }
 
-interface ScripterWorkerDOMEnv extends ScripterWorkerBaseEnv, WebDOMInterface {
+interface FigpadWorkerDOMEnv extends FigpadWorkerBaseEnv, WebDOMInterface {
   /**
    * Import scripts into the worker process.
    * Consider using importAll(...urls) or import(url) instead as those functions
@@ -316,21 +316,21 @@ interface ScripterWorkerDOMEnv extends ScripterWorkerBaseEnv, WebDOMInterface {
   ) :T
 }
 
-interface ScripterWorkerBaseEnv {
+interface FigpadWorkerBaseEnv {
   /** Close this worker */
   close(): void
 
   /**
-   * Invoked when a request initiated by a call to ScripterWorker.request() is received.
+   * Invoked when a request initiated by a call to FigpadWorker.request() is received.
    * The return value will be sent as the response to the request.
    */
-  onrequest? :(req :ScripterWorkerRequest) => Promise<any>|any
+  onrequest? :(req :FigpadWorkerRequest) => Promise<any>|any
 
-  /** Send a message to the main Scripter script (alias for postMessage) */
+  /** Send a message to the main Figpad script (alias for postMessage) */
   send<T=any>(msg :T, transfer?: WebDOM.Transferable[]) :void  // alias for postMessage
 
   /**
-   * Receive a message from the main Scripter script.
+   * Receive a message from the main Figpad script.
    * Resolves on the next message received.
    * This is an alternative to event-based message processing with `onmessage`.
    */
@@ -364,7 +364,7 @@ interface ScripterWorkerBaseEnv {
 }
 
 
-interface ScripterWorkerIframeConfig {
+interface FigpadWorkerIframeConfig {
   /** If true, show the iframe rather than hiding it */
   visible? :boolean
 
@@ -384,12 +384,12 @@ interface ScripterWorkerIframeConfig {
   title? :string
 }
 
-interface ScripterWorkerRequest {
+interface FigpadWorkerRequest {
   readonly id   :string
   readonly data :any
 }
 
-interface ScripterWorkerError {
+interface FigpadWorkerError {
   readonly colno?: number;
   readonly error?: any;
   readonly filename?: string;
@@ -398,7 +398,7 @@ interface ScripterWorkerError {
 }
 
 /** Minimal version of the Web DOM MessageEvent type */
-interface ScripterMessageEvent {
+interface FigpadMessageEvent {
   readonly type: "message" | "messageerror";
   /** Data of the message */
   readonly data: any;
@@ -1072,12 +1072,12 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
 
 
 // ------------------------------------------------------------------------------------
-namespace scripter {
+namespace figpad {
 
   /** Visualize print() results inline in editor. Defaults to true */
   var visualizePrint :bool
 
-  /** Close scripter, optionally showing a message (e.g. reason, status, etc) */
+  /** Close figpad, optionally showing a message (e.g. reason, status, etc) */
   function close(message? :string) :void
 
   /** Register a function to be called when the script ends */

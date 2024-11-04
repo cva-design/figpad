@@ -172,7 +172,7 @@ class Config extends EventEmitter<ConfigEvents> {
     if (migrate.length > 0) {
       let keys = migrate.map(e => e[0])
       let rmkeys :string[] = []
-      console.log(`[scripter] migrating config keys ${keys}`)
+      console.log(`[figpad] migrating config keys ${keys}`)
       for (let [key, fn] of migrate) {
         try {
           let value = fn()
@@ -182,7 +182,7 @@ class Config extends EventEmitter<ConfigEvents> {
             this.data[key] = value
           }
         } catch (err) {
-          console.warn(`[scripter] migration for config "${key}" failed: ${err.stack|err}`)
+          console.warn(`[figpad] migration for config "${key}" failed: ${err.stack|err}`)
         }
       }
       // clear deprecated data from db

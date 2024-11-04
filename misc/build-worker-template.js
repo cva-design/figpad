@@ -60,7 +60,7 @@ async function genfile(infile) {
   }
   //console.log(res.js)
 
-  let parts = res.js.split("$__JS__")
+  let parts = res.code.split("$__JS__")
   if (infile == "src/app/worker-template.js") {
     // wrap $__JS__ in parenthesis
     parts = parts.map((part, i) => {

@@ -6,15 +6,15 @@ import {
   WorkerSetFrameMsg,
 } from "../common/messages"
 
-type ScripterWorkerFun = scriptenv.ScripterWorkerFun
-type ScripterWorkerError = scriptenv.ScripterWorkerError
-type ScripterCreateWorkerOptions = scriptenv.ScripterCreateWorkerOptions
-type ScripterTransferable = scriptenv.ScripterTransferable
-type ScripterWindowedWorker = scriptenv.ScripterWindowedWorker
+type FigpadWorkerFun = scriptenv.FigpadWorkerFun
+type FigpadWorkerError = scriptenv.FigpadWorkerError
+type FigpadCreateWorkerOptions = scriptenv.FigpadCreateWorkerOptions
+type FigpadTransferable = scriptenv.FigpadTransferable
+type FigpadWindowedWorker = scriptenv.FigpadWindowedWorker
 
-interface ScripterWorker extends scriptenv.ScripterWindowedWorker {
+interface FigpadWorker extends scriptenv.FigpadWindowedWorker {
   _onmessage(msg :WorkerMessageMsg) :void
-  _onerror(err :ScripterWorkerError) :void
+  _onerror(err :FigpadWorkerError) :void
   _onclose() :void
   _cancel(reason :string) :void  // sets error to reason and calls terminate
 }
@@ -24,7 +24,7 @@ let workerIdGen = 0
 
 
 // workerMap contains all workers
-const workerMap = new Map<string,ScripterWorker>()  // workerId => Worker
+const workerMap = new Map<string,FigpadWorker>()  // workerId => Worker
 
 
 // called by plugin onmessage dispatch when a worker message is sent from the app
@@ -74,15 +74,15 @@ export function handleIncomingMessage(msg :any) {
 }
 
 
-class _WorkerError extends Error implements ScripterWorkerError {
-  constructor(init? :ScripterWorkerError) {
+class _WorkerError extends Error implements FigpadWorkerError {
+  constructor(init? :FigpadWorkerError) {
     super()
     if (init) {
       for (let k in init) {
         ;(this as any)[k] = init[k]
       }
     }
-    this.name = "ScripterWorkerError"
+    this.name = "FigpadWorkerError"
   }
 }
 
@@ -91,8 +91,8 @@ const kWorkerId = Symbol("workerId")
 
 // special props on data for implementing script-worker requests
 // IMPORTANT: Keep in sync with worker-template.js
-const requestIdProp = "__scripterRequestId"
-const requestErrProp = "__scripterRequestError"
+const requestIdProp = "__figpadRequestId"
+const requestErrProp = "__figpadRequestError"
 
 
 export function createCreateWorker(env :ScriptEnv, scriptId :string) {
@@ -103,7 +103,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
   function init() {
     if (initialized) { return }
     initialized = true
-    env.scripter.addEndCallback(onScriptEnd)
+    env.figpad.addEndCallback(onScriptEnd)
   }
 
   function onScriptEnd() {
@@ -119,31 +119,31 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
   }
 
   return function createWorker(
-    arg0  :ScripterCreateWorkerOptions | undefined | string | ScripterWorkerFun,
-    arg1? :string | ScripterWorkerFun,
-  ) :ScripterWorker {
+    arg0  :FigpadCreateWorkerOptions | undefined | string | FigpadWorkerFun,
+    arg1? :string | FigpadWorkerFun,
+  ) :FigpadWorker {
     if (scriptEnded) {
       console.log(`ignoring createWorker call after script has been stopped`)
-      return Promise.reject(new Error("script stopped")) as any as ScripterWorker
+      return Promise.reject(new Error("script stopped")) as any as FigpadWorker
     }
 
     init()
 
-    let script :string | ScripterWorkerFun = arg1 || (arg0 as string | ScripterWorkerFun)
-    let opt :ScripterCreateWorkerOptions = (
-      arg1 && arg0 ? (arg0 as ScripterCreateWorkerOptions) : {}
+    let script :string | FigpadWorkerFun = arg1 || (arg0 as string | FigpadWorkerFun)
+    let opt :FigpadCreateWorkerOptions = (
+      arg1 && arg0 ? (arg0 as FigpadCreateWorkerOptions) : {}
     )
 
     const workerId = scriptId + "." + (workerIdGen++).toString(36)
-    const eventOrigin = `scripter-worker:${workerId}`
+    const eventOrigin = `figpad-worker:${workerId}`
 
     let js = script.toString()
-    let sendq :{data:any,transfer?:ScripterTransferable[]}[] = []
+    let sendq :{data:any,transfer?:FigpadTransferable[]}[] = []
     let recvp :Promise<any>|null = null
     let recvr = { resolve: (m:any)=>{}, reject: (reason?:any)=>{} }
     let terminated = false
     let closed = false
-    let lastError :ScripterWorkerError|null = null
+    let lastError :FigpadWorkerError|null = null
     let requestIdGen = 0
     const requests = new Map<string,{ resolve:any, reject:any, timer:any }>()
 
@@ -153,21 +153,21 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       }
     }
 
-    // create ScripterWorker object
+    // create FigpadWorker object
     let workerPromiseResolve :()=>void
     let workerPromiseReject :(reason? :any)=>void
     let w = new Promise<void>((resolve, reject) => {
       workerPromiseResolve = resolve
       workerPromiseReject = reject
-    }) as any as ScripterWorker
+    }) as any as FigpadWorker
 
     w[kWorkerId] = workerId
 
-    w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
+    w.postMessage = (data :any, transfer?: FigpadTransferable[]) => {
       checkTerminated()
       sendq.push({ data, transfer })
     }
-    w.send = (data :any, transfer?: ScripterTransferable[]) => {
+    w.send = (data :any, transfer?: FigpadTransferable[]) => {
       w.postMessage(data, transfer)
     }
     w.recv = () :Promise<any> => {
@@ -177,11 +177,11 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       }
       return recvp
     }
-    w.request = (data :any, arg1?: number|ScripterTransferable[], arg2? :number) :Promise<any> => {
-      let transfer: undefined|ScripterTransferable[]
+    w.request = (data :any, arg1?: number|FigpadTransferable[], arg2? :number) :Promise<any> => {
+      let transfer: undefined|FigpadTransferable[]
       let timeout :number = 0
       if (arg2 !== undefined) {
-        transfer = arg1 as undefined|ScripterTransferable[]
+        transfer = arg1 as undefined|FigpadTransferable[]
         timeout = arg2
       } else if (typeof arg1 == "number") {
         timeout = arg1 as number
@@ -215,7 +215,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       return w
     }
 
-    // ScripterWindowedWorker methods
+    // FigpadWindowedWorker methods
     if (opt.iframe && typeof opt.iframe == "object" && opt.iframe.visible) {
       w.setFrame = (x :number, y :number, width :number, height :number) :void => {
         sendMsg<WorkerSetFrameMsg>({ type:"worker-setFrame", workerId, x, y, width, height })
@@ -282,7 +282,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
         }
       }
     }
-    w._onerror = (err :ScripterWorkerError) => {
+    w._onerror = (err :FigpadWorkerError) => {
       lastError = new _WorkerError(err)
       if (w.onerror) {
         w.onerror(lastError)
@@ -338,7 +338,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
         return
       }
 
-      w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
+      w.postMessage = (data :any, transfer?: FigpadTransferable[]) => {
         checkTerminated()
         sendMsg<WorkerMessageMsg>({
           type: "worker-message",

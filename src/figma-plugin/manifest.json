@@ -1,14 +1,17 @@
 {
-  "id": "757836922707087381",
+  "id": "1435381285325568682",
   "api":  "1.0.0",
-  "name": "Scripter",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "name": "Figpad :: Figma Plugin API Devpad",
   "main": "plugin.ts",
   "ui":   "ui.ts",
   "editorType": ["figma"],
-  "figplug": {
-    "libs": ["../common/scripter-env"]
-  },
   "relaunchButtons": [
     {"command": "loadScript", "name": "Open Script"}
-  ]
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["https://figpad.cva.design"]
+  }
 }

@@ -292,8 +292,8 @@ export class Script extends EventEmitter<ScriptEventMap> {
       return
     }
     // dlog("Script patch body", this.name, {isROLib: this.isROLib}, this)
-    const header = `(/*SCRIPTER*/async function __scripter_script_main(){\n`
-    const footer = `\n})()/*SCRIPTER*/` // no ending newline
+    const header = `(/*FIGPAD*/async function __figpad_script_main(){\n`
+    const footer = `\n})()/*FIGPAD*/` // no ending newline
     if (!this._body.startsWith(header)) {
       this._body = header + this._body
     }

@@ -41,7 +41,7 @@ export default (samples => {
 
 s("intro", "Introduction", `
 /**
-Hello hi and welcome to Scripter.
+Hello hi and welcome to Figpad.
 
 Scripts are written in relaxed TypeScript.
 This grey text here is a comment.
@@ -66,7 +66,7 @@ Changes to the script are not automatically saved both to the Figma file
 as well as locally to your computer.
 To remove a script from a Figma file, simply delete the frame in the Figma file's page.
 To share a script with someone else, save it to a Figma file and invite others to the file.
-To load a script from a Figma file, select the script's frame in Figma and then start Scripter.
+To load a script from a Figma file, select the script's frame in Figma and then start Figpad.
 
 Editor basics
 • Scripts are automatically saved locally
@@ -80,7 +80,7 @@ Editor basics
 Keyboard shortcuts
 	Runs the current script                ${kb("⌘↩",    "Ctrl+Return")}
 	Stop a running script                  ${kb("⇧⌘↩",  "Ctrl+Shift+Return")}
-	Closes Scripter                        ${kb("⌥⌘P",   "Ctrl+Alt+P")}
+	Closes Figpad                        ${kb("⌥⌘P",   "Ctrl+Alt+P")}
 	Toggle the menu                        ${kb("⌃M",     "Ctrl+M")}
 	Increases text size                    ${kb("⌘+",     "Ctrl+Plus")}
 	Decreases text size                    ${kb("⌘−",     "Ctrl+Minus")}
@@ -240,7 +240,7 @@ print(Path.split(path))
 
 
 s("basics/files", "Basics/Working with files", `
-// Scripter doesn't support interfacing with your file system,
+// Figpad doesn't support interfacing with your file system,
 // but it does provide functions for working with file data.
 
 // fileType can be used to investigate what type of file a
@@ -361,7 +361,7 @@ print(range(0, 90000000, 2).at(1234567))
 print(range(0, Infinity, 3).at(1234567918383))
 // Be careful when iterating over an infinite sequence since it's easy
 // to lock Figma if you forget to explicitly stop iteration.
-// Scripter will do its best to stop you from doing this: passing an
+// Figpad will do its best to stop you from doing this: passing an
 // infinite sequence to print() or calling toString() on the sequence
 // will only show the first 50 entries followed by "... ∞" to indicate
 // that it goes on forever:
@@ -380,8 +380,8 @@ try {
 
 s("basics/jsx", "Basics/JSX", `
 /**
- * Scripter supports JSX for creating nodes.
- * JSX tags map 1:1 to Scripter's node constructor functions,
+ * Figpad supports JSX for creating nodes.
+ * JSX tags map 1:1 to Figpad's node constructor functions,
  * like for instance Rectangle() and Frame().
  **/
 
@@ -430,7 +430,7 @@ viewport.setSave({x:0,y:0}, 1)
 
 // Create a temporary circle
 let n = Ellipse({ width:200, height:200, fills:[RED.paint] })
-scripter.onend = () => n.remove()
+figpad.onend = () => n.remove()
 
 // Animate the circle moving from left to right by 400dp
 await animate.transition(2.0, progress => {
@@ -527,7 +527,7 @@ s("http/fetch", "HTTP/Fetch", `
 let r = await fetch("https://jsonplaceholder.typicode.com/users/1")
 print(await r.json())
 
-// Scripter provides a few shorthand functions for common tasks:
+// Figpad provides a few shorthand functions for common tasks:
 print(await fetchJson("https://jsonplaceholder.typicode.com/users/1"))
 print(await fetchText("https://jsonplaceholder.typicode.com/users/1"))
 print(await fetchImg("https://figpad.cva.design/icon.png"))
@@ -566,7 +566,7 @@ async function fetchFigmaFile(fileKey :string) :Promise<any> {
 
 s("worker/basics", "Workers/Worker Basics", `
 /**
-Workers are new in Scripter since July 2020. Workers is a way to execute code in parallel inside a full WebWorker environment, with access to features like script loading and OffscreenCanvas. There are also iframe-based workers as an option when you need a full complete web DOM with access to the full Web API.
+Workers are new in Figpad since July 2020. Workers is a way to execute code in parallel inside a full WebWorker environment, with access to features like script loading and OffscreenCanvas. There are also iframe-based workers as an option when you need a full complete web DOM with access to the full Web API.
 
 Let's get started with a simple worker:
 */
@@ -581,7 +581,7 @@ w.send(4)  // send some input
 print(await w.recv())  // wait for a reply
 
 /**
-The above worker is written in idiomatic Scripter style using send() and recv() calls.
+The above worker is written in idiomatic Figpad style using send() and recv() calls.
 
 If that's not your jam, you can alternatively use the event-based WebWorker API. The following example also shows how you can pass a worker script as a string:
 */
@@ -602,7 +602,7 @@ w2.onmessage = ev => {
 await w2
 
 /**
-Since Scripter is fully async-await capable, it's usually easier to use the send() and recv() functions instead of postMessage & onmessage events.
+Since Figpad is fully async-await capable, it's usually easier to use the send() and recv() functions instead of postMessage & onmessage events.
 
 send() and recv() are optionally typed, which can be useful when you are writing more complicated scripts or simply prefer to have stricter types:
 */
@@ -636,7 +636,7 @@ print(await r2)
 s("worker/import", "Workers/Importing libraries", `
 /**
 Workers can import scripts from the Internet and NPM, using w.import().
-This opens up a world of millions of JavaScript libraries to Scripter!
+This opens up a world of millions of JavaScript libraries to Figpad!
 Browse libraries at https://www.npmjs.com/
 
 Let's import the lru_map package:
@@ -667,7 +667,7 @@ w = createWorker(async w => {
 print(await w.recv())
 
 // Note that TypeScript types are not supported for imported modules.
-// Scripter considers the API exposed by an imported library as "any".
+// Figpad considers the API exposed by an imported library as "any".
 `),
 
 
@@ -958,7 +958,7 @@ s("advanced/animation", "Misc/Animation", `
 
 // Create a temporary rectangle
 let r = Rectangle({ fills:[ORANGE.paint], rotation: 45 })
-scripter.onend = () => r.remove()
+figpad.onend = () => r.remove()
 
 // save viewport and focus on the rectangle
 viewport.focusSave(r, 1.0)
@@ -980,7 +980,7 @@ await animate(time => {
 `),
 
 
-// Note: There's a reference to the name of this in scripter-env.d.ts
+// Note: There's a reference to the name of this in figpad-env.d.ts
 s("misc/timing-function-viz", "Misc/Timing Functions", `
 // This generates a grid of graphs visualizing the different
 // timing functions available from animate.ease*
@@ -1036,7 +1036,7 @@ s("advanced/poisson-disc-gen", "Misc/Poisson-disc generator", `
 /**
 Progressively generates Poisson-disc pattern.
 Poisson-disc sampling produces points that are tightly-packed, but no closer to each other than a specified minimum distance, resulting in a more natural pattern.
-This implementation is based on https://bl.ocks.org/mbostock/dbb02448b0f93e4c82c3 and uses a worker which computes Poisson-disc samples using a generator. Samples are sent from the worker to the Scripter script which then creates discs on the Figma canvas.
+This implementation is based on https://bl.ocks.org/mbostock/dbb02448b0f93e4c82c3 and uses a worker which computes Poisson-disc samples using a generator. Samples are sent from the worker to the Figpad script which then creates discs on the Figma canvas.
 */
 
 // Constants controlling the resulting graphic
@@ -1070,7 +1070,7 @@ const w = createWorker({iframe:{visible:false}}, async w => {
 		}
 	}
 	// send possibly last samples and finally an empty list,
-	// which signals the end for the Scripter script.
+	// which signals the end for the Figpad script.
 	w.send(sendq)
 	w.send([])
 

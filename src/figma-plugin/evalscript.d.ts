@@ -1,4 +1,4 @@
-// defined by library ../common/scripter-env.js
+// defined by library ../common/figpad-env.js
 type EvalCancelFun = (reason?:Error)=>void
 interface EvalScriptFun {
   (reqid :string, js :string) :[Promise<any>,EvalCancelFun]

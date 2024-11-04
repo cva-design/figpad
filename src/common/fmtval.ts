@@ -77,16 +77,16 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
       return "[" + v.map(v => _fmtValue(v, ln2, seen)).join(", ") + "]"
     }
 
-    if ("__scripter_lazy_seq__" in v) {
+    if ("__figpad_lazy_seq__" in v) {
       v.__proto__ = LazyNumberSequence.prototype
       return "LazySeq[" + v.toString() + "]"
     }
 
-    if ("__scripter_error__" in v) {
-      // TODO: source pos v.__scripter_error__.srcpos (it's in compiled-code space)
-      let s = v.__scripter_error__.str
-      if (v.__scripter_error__.stack && v.__scripter_error__.stack.length) {
-        s += "\n" + v.__scripter_error__.stack.join("\n")
+    if ("__figpad_error__" in v) {
+      // TODO: source pos v.__figpad_error__.srcpos (it's in compiled-code space)
+      let s = v.__figpad_error__.str
+      if (v.__figpad_error__.stack && v.__figpad_error__.stack.length) {
+        s += "\n" + v.__figpad_error__.stack.join("\n")
       }
       return s
     }

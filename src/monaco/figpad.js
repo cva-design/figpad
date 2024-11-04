@@ -1,4 +1,4 @@
-// copied to ./monaco-editor/esm/vs/editor/scripter.js by misc/update-monaco.sh
+// copied to ./monaco-editor/esm/vs/editor/figpad.js by misc/update-monaco.sh
 import { StaticServices } from './standalone/browser/standaloneServices'
 import {
   SimpleEditorModelResolverService,
@@ -39,7 +39,7 @@ function patchUriLabelService(getUriLabel) {
 }
 
 
-window.__scripterMonaco = {
+window.__figpadMonaco = {
   patchEditorService,
   patchEditorModelResolverService,
   patchUriLabelService,

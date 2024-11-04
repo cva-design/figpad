@@ -209,7 +209,7 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
       ;(this as any).sourceLineLen = this.editor.currentModel.getLineLength(this.sourceLine)
     } catch(e) {
       console.warn(
-        `[scripter/ViewZone._updateSourceLineLen] `+
+        `[figpad/ViewZone._updateSourceLineLen] `+
         `Model.getLineLength(${this.sourceLine}): ${e.stack||e}`
       )
       ;(this as any).sourceLineLen = 1
@@ -401,7 +401,7 @@ export class InputViewZone extends ViewZone {
 
   enqueueResolver(resolver :InputResolver) {
     if (this.nextResolver) {
-      console.warn("[scripter] enqueueResolver while this.nextResolver != null")
+      console.warn("[figpad] enqueueResolver while this.nextResolver != null")
       // let prevResolver = this.nextResolver
       // let nextResolver = resolver
       // resolver = (msg:Omit<UIInputResponseMsg,"id"|"type">) => {

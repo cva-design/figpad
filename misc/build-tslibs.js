@@ -37,9 +37,9 @@ s = 'declare global { namespace WebWorkerEnv {\n' +
 addlib("webworker", "lib.webworker.d.ts", s)
 
 
-// scripter lib
-s = readfile("src/common/scripter-env.d.ts")
-addlib("scripter", "scripter-env.d.ts", s)
+// figpad lib
+s = readfile("src/common/figpad-env.d.ts")
+addlib("figpad", "figpad-env.d.ts", s)
 
 
 // figma lib

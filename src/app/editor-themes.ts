@@ -3,7 +3,7 @@ import * as monaco from "../monaco/monaco"
 // see:
 // microsoft.github.io/monaco-editor/playground.html#customizing-the-appearence-exposed-colors
 
-monaco.editor.defineTheme('scripter-light', {
+monaco.editor.defineTheme('figpad-light', {
   base: 'vs',
   inherit: true,
   rules: [
@@ -62,7 +62,7 @@ monaco.editor.defineTheme('scripter-light', {
   }
 })
 
-// monaco.editor.setTheme('scripterLight')
+// monaco.editor.setTheme('figpadLight')
 
 /*
 // A list of color names:

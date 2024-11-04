@@ -58,6 +58,7 @@ export function setRuntime(r :Runtime) :RuntimeMessageHandler {
 // including waiting for any timers run by the script.
 //
 export function run(js :string, sourceMapJSON :string) :EvalPromise {
+  console.log("RUNNING", js)
   js = js.replace(/\n\/\/#\s*sourceMappingURL=.+/, "")
   let id = (nextEvalRequestId++).toString(36)
   let p = new Promise<any>(async (resolve, reject) => {
@@ -196,7 +197,7 @@ async function handlePrintMsg(msg :PrintMsg) {
       let arg = msg.args[i]
       let isobj = arg && typeof arg == "object"
 
-      if (isobj && "__scripter_image_marker__" in arg) {
+      if (isobj && "__figpad_image_marker__" in arg) {
         // the arg is an image
         let url = ""
         if (typeof arg.source == "string") {
@@ -234,7 +235,7 @@ async function handlePrintMsg(msg :PrintMsg) {
         }
         messageHtml += htmlEncode(fmtValue(arg))
         prevWasText = true
-        if (isobj && "__scripter_error__" in arg) {
+        if (isobj && "__figpad_error__" in arg) {
           isError = true
         }
       }

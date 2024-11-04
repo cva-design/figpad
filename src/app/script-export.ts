@@ -17,7 +17,7 @@ export async function exportAllScripts() {
   }))
 
   let datetime = (new Date).toLocaleString().replace(/\//g, "-").replace(/:/g, ".")
-  let name = `Scripter Scripts ${datetime}`
+  let name = `Figpad Scripts ${datetime}`
   await saveZipArchive(`${name}.zip`, {
     name,
     files

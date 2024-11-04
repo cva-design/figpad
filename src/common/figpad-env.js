@@ -1,9 +1,9 @@
 // This library exports a single function:
 //    function evalScript(reqId :string, js :string) :Promise<any>
 //
-// evalScript executes a script in the scripter environment.
+// evalScript executes a script in the figpad environment.
 //
-// Note: scripter-env.d.ts is not the definition file for the API of this library,
+// Note: figpad-env.d.ts is not the definition file for the API of this library,
 // but the definitions of the environment of a script.
 //
 
@@ -51,7 +51,7 @@ function preClone(v, seen) {
 
     if (v instanceof Error) {
       let stackFrames = scriptLib.getUserStackFrames(v.stack)
-      return { __scripter_error__: {
+      return { __figpad_error__: {
         str: String(v),
         stack: stackFrames.slice(0, stackFrames.length-1), // drop main
         srcpos: scriptLib.getFirstSourcePosInStackFrames(stackFrames, /* stackOffset */1),
@@ -88,7 +88,7 @@ function preClone(v, seen) {
 
 function _print(env, reqId, args) {
   console.log.apply(console, args)
-  if (!env.scripter.visualizePrint || env.canceled) {
+  if (!env.figpad.visualizePrint || env.canceled) {
     return
   }
 
@@ -140,8 +140,8 @@ function _print(env, reqId, args) {
 // ------------------------------------------------------------------------------------------
 
 const _unavail = (name, msg) => () => {
-  let e = new Error(name + " is unavailable in Scripter" + (msg ? ". " + msg : ""))
-  e.name = "ScripterError"
+  let e = new Error(name + " is unavailable in Figpad" + (msg ? ". " + msg : ""))
+  e.name = "FigpadError"
   throw e
 }
 
@@ -162,10 +162,10 @@ const figmaObject = Object.create(figma, {
   ui: { value: ui, enumerable: true },
   showUI: { value: _unavail("showUI") },
 
-  // closePlugin is fine, but closeScripter is portable -- show a warning.
+  // closePlugin is fine, but closeFigpad is portable -- show a warning.
   closePlugin: {
     value: function closePlugin(message) {
-      console.warn("Consider using scripter.close(message?:string) instead of figma.closePlugin")
+      console.warn("Consider using figpad.close(message?:string) instead of figma.closePlugin")
       return figma.closePlugin(message)
     },
     enumerable: true
@@ -671,7 +671,7 @@ env.ORANGE  = new Color(1   , 0.5 , 0)
 
 // ------------------------------------------------------------------------------------------
 
-env.scripter = {
+env.figpad = {
   visualizePrint: true,
 
   close(message) {
@@ -680,7 +680,7 @@ env.scripter = {
     } else if (typeof window != "undefined") {
       window.close()
     } else {
-      throw new Error("can't close Scripter")
+      throw new Error("can't close Figpad")
     }
   },
 
@@ -899,8 +899,8 @@ function initialize() {
 
   envKeys = Object.keys(env)
 
-  // Note: "__scripter_script_main" has special meaning: used to find stack start.
-  //       "__scripter_script_main" used to be added here but is now added by the
+  // Note: "__figpad_script_main" has special meaning: used to find stack start.
+  //       "__figpad_script_main" used to be added here but is now added by the
   //       editor, in script.ts
 
   jsHeader = `
@@ -908,7 +908,7 @@ function initialize() {
   function __oncurrentpagechange() { currentPage = figma.currentPage; }
   [
     function(module,exports,Symbol,__env,__print,__reqid,${envKeys.join(',')}){<LF>
-      Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});
+      Object.defineProperty(figpad,"onend",{set:function(f){__onend=f}});
       currentPage = figma.currentPage;
       figma.on("currentpagechange", __oncurrentpagechange);
       function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
@@ -969,13 +969,13 @@ function _evalScript(reqId, js) {
     //   console.log("--------- script code --------\n" + js + "\n-----------------------------\n")
     //   // sanity checks for when typescript or monaco are upgraded and tested
     //   if (js.substr(0, expectHeader1.length) != expectHeader1) {
-    //     console.warn("scripter-eval UNEXPECTED header1", {
+    //     console.warn("figpad-eval UNEXPECTED header1", {
     //       expect: expectHeader1,
     //       actual: js.substr(0, expectHeader1.length)
     //     })
     //   }
     //   if (js.substr(expectHeader1.length, expectHeader2.length) != expectHeader2) {
-    //     console.warn("scripter-eval UNEXPECTED header2")
+    //     console.warn("figpad-eval UNEXPECTED header2")
     //   }
     // }
     // js = js.substr(expectHeader1.length + expectHeader2.length)
@@ -1006,7 +1006,7 @@ function _evalScript(reqId, js) {
       clearTimeout:  bindenv(_clearTimeout),
       clearInterval: bindenv(_clearInterval),
     })
-    env0.scripter = Object.assign({}, env.scripter)
+    env0.figpad = Object.assign({}, env.figpad)
     env0.DOM = new scriptLib.DOM(env0)
 
     // Node constructors (depends on DOM)
@@ -1054,11 +1054,11 @@ function _evalScript(reqId, js) {
           try {
             userfun()
           } catch (err) {
-            console.warn("uncaught exception in scripter.onend: " + (err.stack || err))
+            console.warn("uncaught exception in figpad.onend: " + (err.stack || err))
           }
         }
-        if (env0.scripter._onEndCallbacks) {
-          for (let f of env0.scripter._onEndCallbacks) {
+        if (env0.figpad._onEndCallbacks) {
+          for (let f of env0.figpad._onEndCallbacks) {
             try { f() } catch (e) { console.error("error in env.onend(): " + (e.stack || e)) }
           }
         }
@@ -1107,7 +1107,7 @@ function _evalScript(reqId, js) {
           try { _cancelAllTimers(e) } catch(_) {}
           onend()
 
-          // scripterStack is a work-around for limitations in fig-js
+          // figpadStack is a work-around for limitations in fig-js
           let e2 = new Error()
           let stack = e.stack
           if (stack.substr(0, e.message.length) != e.message) {
@@ -1115,7 +1115,7 @@ function _evalScript(reqId, js) {
             stack = e.message + "\n" + stack
           }
           e2.message = e.message
-          e2.scripterStack = stack
+          e2.figpadStack = stack
           e2.stack = stack
 
           reject(e2)

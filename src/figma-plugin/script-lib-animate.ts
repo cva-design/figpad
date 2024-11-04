@@ -156,7 +156,7 @@ easingsFunctions.easeInOut = easingsFunctions.easeInOutQuad
 
 
 export function initAnimateAPI(animate :SAnimate) {
-  // Note: The animate() function passed in here is defined in scripter-env.js for convenient
+  // Note: The animate() function passed in here is defined in figpad-env.js for convenient
   // access to timing functions. This code here adds properties that are script-agnostic to that
   // function.
 

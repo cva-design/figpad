@@ -186,7 +186,7 @@ export interface WorkerCreateRequestMsg extends TransactionalMsg {
   type     :"worker-create-req"
   workerId :string
   js       :string
-  iframe?  :scriptenv.ScripterWorkerIframeConfig | boolean | null
+  iframe?  :scriptenv.FigpadWorkerIframeConfig | boolean | null
 }
 
 export interface WorkerCreateResponseMsg extends TransactionalMsg {

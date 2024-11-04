@@ -80,23 +80,23 @@ str = '/// <reference no-default-lib="true"/>\n' + str
 // Figma plugins, like Console.
 str += "\n" + fs.readFileSync(__dirname + "/figma-extras.d.ts", "utf8")
 
-// // write build/lib.scripter.d.ts
-// fs.writeFileSync("build/lib.scripter.d.ts", str, "utf8")
+// // write build/lib.figpad.d.ts
+// fs.writeFileSync("build/lib.figpad.d.ts", str, "utf8")
 
 let js = `export const lib_dts = ${JSON.stringify(str)};`
-let scripterLibJsFile = monacoEditorDir + "/esm/vs/language/typescript/lib/scripter.js"
-console.log(`write ${scripterLibJsFile}`)
-fs.writeFileSync(scripterLibJsFile, js, "utf8")
+let figpadLibJsFile = monacoEditorDir + "/esm/vs/language/typescript/lib/figpad.js"
+console.log(`write ${figpadLibJsFile}`)
+fs.writeFileSync(figpadLibJsFile, js, "utf8")
 
 
 patch("esm/vs/language/typescript/tsWorker.js", js => {
   // ...
   // - import { lib_dts, lib_es6_dts } from './lib/lib.js';
-  // + import { lib_dts, lib_dts as lib_es6_dts } from './lib/scripter.js';
+  // + import { lib_dts, lib_dts as lib_es6_dts } from './lib/figpad.js';
   // ...
   js = js.replace(
     /import[^\r\n]+lib_dts[^\r\n]+/m,
-    "import { lib_dts, lib_dts as lib_es6_dts } from './lib/scripter.js';"
+    "import { lib_dts, lib_dts as lib_es6_dts } from './lib/figpad.js';"
   )
   // ...
   // - text = model.getValue();
@@ -111,19 +111,19 @@ patch("esm/vs/language/typescript/tsWorker.js", js => {
 })
 
 patch("esm/vs/base/common/labels.js", (js, p) => {
-  js = p.addImport(js, "import * as scripter from '../../editor/scripter.js'")
+  js = p.addImport(js, "import * as figpad from '../../editor/figpad.js'")
   js = js.replace(
     /(function\s+getBaseLabel\([^\)]*\)\s+\{)/,
-    "$1\n    let s = scripter.getBaseLabel(resource); if (s) { return s }"
+    "$1\n    let s = figpad.getBaseLabel(resource); if (s) { return s }"
   )
   return js
 })
 
 patch("esm/vs/base/common/resources.js", (js, p) => {
-  js = p.addImport(js, "import * as scripter from '../../editor/scripter.js'")
+  js = p.addImport(js, "import * as figpad from '../../editor/figpad.js'")
   js = js.replace(
     /(function\s+basenameOrAuthority\([^\)]*\)\s+\{)/,
-    "$1\n    let s = scripter.basenameOrAuthority(resource);if (s) { return s }"
+    "$1\n    let s = figpad.basenameOrAuthority(resource);if (s) { return s }"
   )
   return js
 })

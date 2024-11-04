@@ -96,20 +96,20 @@ export class FetchFormData implements FormData {
 
   constructor(init? :HTMLFormElement) {
     if (init) {
-      throw new Error("<form> element not supported by scripter")
+      throw new Error("<form> element not supported by figpad")
     }
   }
 
   set(name: string, value: string|Blob, _fileName?: string): void {
     if (typeof value != "string") {
-      throw new Error("Blobs not supported by scripter")
+      throw new Error("Blobs not supported by figpad")
     }
     this._m[name] = new Set([value])
   }
 
   append(name: string, value: string|Blob, _fileName?: string): void {
     if (typeof value != "string") {
-      throw new Error("Blobs not supported by scripter")
+      throw new Error("Blobs not supported by figpad")
     }
     let s = this._m[name]
     if (s) {
@@ -182,7 +182,7 @@ export class FetchResponse implements Response {
     this.redirected = r.redirected
     this.status = r.status
     this.statusText = r.statusText
-    this.trailer = Promise.reject(new Error("Response.trailer unsupported in Scripter"))
+    this.trailer = Promise.reject(new Error("Response.trailer unsupported in Figpad"))
     this.type = r.resType
     this.url = r.url
     this.bodyUsed = !!r.body
@@ -294,7 +294,7 @@ export class FetchRequest implements Request {
     this.method = p.method || "GET"
     this.mode = p.mode || "cors"
     this.redirect = p.redirect || "follow"
-    this.referrer = p.referrer || "about:scripter"
+    this.referrer = p.referrer || "about:figpad"
     this.referrerPolicy = p.referrerPolicy || ""
     this.signal = new FetchAbortSignal() as unknown as AbortSignal
   }

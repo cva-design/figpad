@@ -66,8 +66,8 @@ export function fileType(nameOrData :ArrayLike<byte>|ArrayBuffer|string) :filety
 }
 
 
-interface IImg { // synced with scripter-env.d.ts
-  __scripter_image_marker__ :1
+interface IImg { // synced with figpad-env.d.ts
+  __figpad_image_marker__ :1
 
   url         :string
   type        :string  // mime type
@@ -82,7 +82,7 @@ interface IImg { // synced with scripter-env.d.ts
 
   _guessFromData() :void
 }
-interface ImgOptions { // synced with scripter-env.d.ts
+interface ImgOptions { // synced with figpad-env.d.ts
   type?   :string  // mime type
   width?  :number
   height? :number
@@ -96,7 +96,7 @@ export function Img(
   if (!(this instanceof Img)) {
     return new Img(source, optionsOrWidth)
   }
-  this.__scripter_image_marker__ = 1
+  this.__figpad_image_marker__ = 1
   this.type = ""
   this.width = 0
   this.height = 0

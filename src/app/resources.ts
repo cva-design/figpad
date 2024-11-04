@@ -21,7 +21,7 @@ export class Resource {
 
 export default window["__resources"] = [
   new Resource("Figma API",     tslibs.figma),
-  new Resource("Scripter API",  tslibs.scripter),
+  new Resource("Figpad API",  tslibs.figpad),
   new Resource("WebDOM API",    tslibs.dom),
   new Resource("WebWorker API", tslibs.webworker),
 ]

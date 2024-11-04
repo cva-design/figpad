@@ -72,7 +72,7 @@ export const SavedScriptIndex = new class {
       dlog(`background scan starting`)
       this.scanInBackground()
     } catch (err) {
-      console.error(`PLEASE REPORT: Scripter SavedScriptIndex init failure: ${err.stack||err}`)
+      console.error(`PLEASE REPORT: Figpad SavedScriptIndex init failure: ${err.stack||err}`)
     }
   }
 
@@ -192,9 +192,9 @@ export const SavedScriptIndex = new class {
 
 
   async scanPage(page :PageNode, priority :ScanPriority) :Promise<SavedScriptIndexData> {
-    let index :SavedScriptIndexData = {} // Scripter GUID => node id
+    let index :SavedScriptIndexData = {} // Figpad GUID => node id
     // maxdepth controls how far we go in searching the document for script nodes.
-    // This number needs to be small so that opening Scripter in large files is not slowing
+    // This number needs to be small so that opening Figpad in large files is not slowing
     // the world down too much.
     // 1 = check inside top level containers but no further.
     const maxdepth = 1

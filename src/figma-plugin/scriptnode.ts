@@ -28,7 +28,7 @@ export async function createScriptNode(script :ScriptMsg) :Promise<ScriptNode> {
   f.cornerRadius = 6
   f.cornerSmoothing = 0.4
   f.backgrounds = [{type:"SOLID",color:{r:1,g:1,b:1}}]
-  f.name = "Scripter Script"
+  f.name = "Figpad Script"
   f.expanded = false
   f.x = pos.x
   f.y = pos.y
@@ -90,7 +90,7 @@ export async function createScriptNode(script :ScriptMsg) :Promise<ScriptNode> {
 
   // group
   let g = figma.group([f], figma.currentPage, 0)
-  g.name = "Scripter Script"
+  g.name = "Figpad Script"
   g.expanded = false
 
   // set relaunch data and node data. We have to set it twice, once on the group and once on

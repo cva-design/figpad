@@ -338,7 +338,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  value={config.tabSize}
                  onChange={this.onChangeSettingNum} />
         </label>
-        <label title="Size of Scripter window">
+        <label title="Size of Figpad window">
           <div className="icon window" />
           <select name="config.windowSize" value={windowSizeVal} onChange={this.onChangeWindowSize}>
           <option disabled={true}>Window W×H</option>
@@ -364,7 +364,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           </select>
         </label>
         <label
-          title={`Scale of the Scripter editor text size (${isMac ? "⌘+/-" : "Ctrl+/-"})`}
+          title={`Scale of the Figpad editor text size (${isMac ? "⌘+/-" : "Ctrl+/-"})`}
           >
           <div className="icon text-size" />
           {/* Note: Sync min & max with values in app.ts uiScaleSteps */}

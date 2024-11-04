@@ -24,10 +24,10 @@ export class DOM {
   getShadowParent() :BaseNode & ChildrenMixin {
     if (!this.shadowParent) {
       this.shadowParent = figma.createFrame()
-      this.shadowParent.name = ".scripter-tmp"
+      this.shadowParent.name = ".figpad-tmp"
       this.shadowParent.visible = false
       this.shadowParent.expanded = false
-      this.env.scripter.addEndCallback(this.onScriptEnd.bind(this))
+      this.env.figpad.addEndCallback(this.onScriptEnd.bind(this))
     }
     return this.shadowParent
   }

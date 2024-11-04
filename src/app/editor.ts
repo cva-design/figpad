@@ -21,8 +21,8 @@ const DEBUG_HIDDEN_AREAS = DEBUG && false
 
 const ts = monaco.languages.typescript
 
-// some extensions to monaco, defined in src/monaco/monaco-editor/esm/vs/editor/scripter.js
-declare var __scripterMonaco : {
+// some extensions to monaco, defined in src/monaco/monaco-editor/esm/vs/editor/figpad.js
+declare var __figpadMonaco : {
   patchEditorService(
     openCodeEditor:(input :OpenCodeEditorInput, editor :MonacoEditor)=>Promise<MonacoEditor|null>
   ) :void
@@ -99,7 +99,7 @@ const defaultOptions :EditorOptions = {
   fontFamily: varspaceFontFamily,
   disableMonospaceOptimizations: false, // required for non-monospace fonts
 
-  extraEditorClassName: 'scripter-light',
+  extraEditorClassName: 'figpad-light',
 
   // disable links since they can't be clicked in Figma anyways
   links: false,
@@ -177,7 +177,7 @@ const typescriptCompilerOptions :monaco.languages.typescript.CompilerOptions = {
   module: ts.ModuleKind.ES2015,
   sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
   strictNullChecks: true,
-  newLine: ts.NewLineKind.LineFeed, // scripter-env.js relies on this
+  newLine: ts.NewLineKind.LineFeed, // figpad-env.js relies on this
 
   noImplicitAny: false,
   suppressImplicitAnyIndexErrors: true,
@@ -189,8 +189,8 @@ const typescriptCompilerOptions :monaco.languages.typescript.CompilerOptions = {
   // we disable sourcemaps for now (since it's pointless).
   // However, we could use the sourcemap lib to decorate error stack traces a la
   // evanw's sourcemap-support. The plugin could do this, so that the stack trace in Figma's
-  // console is updated as well as what we display in the Scripter UI. Upon error, the plugin
-  // process could request sourcemap from Scripter, so that we only have to transmit it on error.
+  // console is updated as well as what we display in the Figpad UI. Upon error, the plugin
+  // process could request sourcemap from Figpad, so that we only have to transmit it on error.
   // inlineSourceMap: true,
 }
 
@@ -343,10 +343,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   modelURIForScript(script :Script) :monaco.Uri {
     let filename = script.guid
     if (!filename.endsWith(".d.ts")) {
-      filename = "scripter." + filename + ".tsx"
+      filename = "figpad." + filename + ".tsx"
     }
     return monaco.Uri.file(filename)
-    // return monaco.Uri.from({scheme:"scripter", path:filename})
+    // return monaco.Uri.from({scheme:"figpad", path:filename})
   }
 
   setCurrentScriptFromUserAction(script :Script) {
@@ -407,7 +407,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let prevModel = this.editor.getModel()
     if (prevModel !== model) {
       // // Note: Monaco only has a single TypeScript instance, so we can't have multiple
-      // // models in Scripter as they would share scope, which causes errors like
+      // // models in Figpad as they would share scope, which causes errors like
       // // "can not redeclare x". So, we dispose any previous model before setting a new one.
       // // Disposing of a model causes the TypeScript instance to "forget".
       // if (prevModel) {
@@ -606,7 +606,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       let v = options[k]
       if (k == "extraEditorClassName") {
         // prefix with current theme
-        v = `scripter-light ${v}`.trim()
+        v = `figpad-light ${v}`.trim()
       }
       if (this.options[k] !== v) {
         this.options[k] = v
@@ -652,7 +652,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     // let runqItem = runqueue.push()
 
-    // compiling a script may take a long time when run just after Scripter is opened,
+    // compiling a script may take a long time when run just after Figpad is opened,
     // as the typescript worker sometimes takes a little while to start.
     toolbar.incrWaitCount()
     let prog :ScriptProgram
@@ -918,7 +918,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
             flags |= ModelChangeFlags.REMOVE_LINE
             flags |= ModelChangeFlags.LAST_LINE_INTACT
             if (endLine == startLine) {
-              console.warn("[scripter] unexpected condition: endLine == startLine")
+              console.warn("[figpad] unexpected condition: endLine == startLine")
             }
           }
         } else /*if (c.rangeLength == 0)*/ {
@@ -1218,14 +1218,14 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // That implementation assumes the toString method is called implicitly by the map container,
     // but the new Map object keys on any object! This means that services can not be overridden.
     // Thus, we patch the prototype of the editor service instead of using service overrides.
-    __scripterMonaco.patchEditorService(this.monacoOpenCodeEditor.bind(this))
+    __figpadMonaco.patchEditorService(this.monacoOpenCodeEditor.bind(this))
     // This patch enables "Find All References"
-    __scripterMonaco.patchEditorModelResolverService((editor, uri) => {
+    __figpadMonaco.patchEditorModelResolverService((editor, uri) => {
       return monaco.editor.getModel(uri)
     })
     // returns a label for a resource.
     // Shows up as a tool tip and small text next to the filename
-    __scripterMonaco.patchUriLabelService((uri, options) => {
+    __figpadMonaco.patchUriLabelService((uri, options) => {
       let model = monaco.editor.getModel(uri)
       if (model) {
         let script = model[kScript] as Script|undefined
@@ -1239,8 +1239,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       return uri.path
     })
     // Show script names instead of their filenames
-    __scripterMonaco.patchBasenameOrAuthority(uri => {
-      if (uri && uri.path.indexOf("scripter.") != -1) {
+    __figpadMonaco.patchBasenameOrAuthority(uri => {
+      if (uri && uri.path.indexOf("figpad.") != -1) {
         let model = monaco.editor.getModel(uri)
         let script = model[kScript] as Script|undefined
         if (script) {
@@ -1252,7 +1252,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // create editor
     this.editor = monaco.editor.create(document.getElementById('editor')!, {
       model,
-      theme: 'scripter-light',
+      theme: 'figpad-light',
       ...this.options,
       readOnly: script.isROLib,
     })
@@ -1387,7 +1387,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   initEditorActions() {
     this.editor.addAction({
-      id: 'scripter-run-script',
+      id: 'figpad-run-script',
       label: 'Run Script',
       keybindings: [
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
@@ -1420,9 +1420,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // })
 
     // this.editor.addAction({
-    //   id: "scripter-stop-script",
+    //   id: "figpad-stop-script",
     //   label: "Stop Script",
-    //   // precondition: "scripter-script-running", // TODO: figure out how this works
+    //   // precondition: "figpad-script-running", // TODO: figure out how this works
     //   keybindings: [
     //     // Note: There's a bug in monaco where the following causes cmd-X to stop working:
     //     // monaco.KeyMod.CtrlCmd | monaco.KeyCode.Shift | monaco.KeyCode.KEY_X,
@@ -1713,7 +1713,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         }
 
         // await at top level is tricky to identify as the same TS code is used for both
-        // top-level and function-level, the latter which is a valid error in Scripter.
+        // top-level and function-level, the latter which is a valid error in Figpad.
         if (m.message.indexOf("'await'") != -1) {
           if (semdiag === null) {
             // request diagnostics from TypeScript

@@ -121,12 +121,12 @@ function rpc_fetch(req :FetchRequestMsg) {
 }
 
 
-interface ScripterWorkerI {
+interface FigpadWorkerI {
   postMessage(message :any, transfer? :Transferable[]) :void
   terminate() :void
-  onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
-  onmessageerror :(this: ScripterWorkerI, ev: MessageEvent) => any
-  onerror        :(this: ScripterWorkerI, ev: ErrorEvent) => any
+  onmessage      :(this: FigpadWorkerI, ev: MessageEvent) => any
+  onmessageerror :(this: FigpadWorkerI, ev: MessageEvent) => any
+  onerror        :(this: FigpadWorkerI, ev: ErrorEvent) => any
 }
 
 
@@ -163,24 +163,24 @@ function worker_iframeInit() {
 
 
 
-type ScripterWorkerIframeConfig = scriptenv.ScripterWorkerIframeConfig
+type FigpadWorkerIframeConfig = scriptenv.FigpadWorkerIframeConfig
 
 
-class IFrameWorker implements ScripterWorkerI {
+class IFrameWorker implements FigpadWorkerI {
   readonly workerId :string
   readonly frame    :HTMLIFrameElement
   readonly window   :UIWindow|null = null
   readonly recvq :{ message :any, transfer? :Transferable[] }[] = []
   readonly iframeUrl :string  // non-empty when content is loaded from URL
 
-  onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
-  onmessageerror :(this: ScripterWorkerI, ev: MessageEvent) => any
-  onerror        :(this: ScripterWorkerI, ev: ErrorEvent) => any
+  onmessage      :(this: FigpadWorkerI, ev: MessageEvent) => any
+  onmessageerror :(this: FigpadWorkerI, ev: MessageEvent) => any
+  onerror        :(this: FigpadWorkerI, ev: ErrorEvent) => any
 
   ready = false
   closed = false
 
-  constructor(workerId :string, scriptBody :string, config :ScripterWorkerIframeConfig) {
+  constructor(workerId :string, scriptBody :string, config :FigpadWorkerIframeConfig) {
     // laily initialize one-time, app-wide iframe support
     worker_iframeInit()
 
@@ -198,12 +198,13 @@ class IFrameWorker implements ScripterWorkerI {
         "allow-modals",
         "allow-pointer-lock",
         "allow-downloads",
-        "allow-downloads-without-user-activation",
+        // no longer supported
+        // "allow-downloads-without-user-activation",
       ].join(" ") + (
         // when the iframe is constructed with a script, set allow-same-origin to allow us
         // to interact with the iframe's document.
         // However, for security reasons, do NOT set this when the worker is loaded from an
-        // arbitrary URL, as the URL could be pointed to the scripter website which would
+        // arbitrary URL, as the URL could be pointed to the figpad website which would
         // or at least could pose a risk. Better safe than sorry :–)
         iframeUrl ? "" : " allow-same-origin"
       )
@@ -257,7 +258,7 @@ class IFrameWorker implements ScripterWorkerI {
         dlog(`worker#${workerId} iframe loaded`)
         // win.focus()
         if (iframeUrl) {
-          // url-based iframes will not send __scripter_iframe_ready, so trigger onReady now
+          // url-based iframes will not send __figpad_iframe_ready, so trigger onReady now
           this.onReady()
         } else {
           // add key event handler to script iframes
@@ -287,7 +288,7 @@ class IFrameWorker implements ScripterWorkerI {
       })
       document.body.appendChild(frame)
       if (iframeUrl) {
-        // url-based iframes will not send __scripter_iframe_ready, so trigger onReady now
+        // url-based iframes will not send __figpad_iframe_ready, so trigger onReady now
         frame.onload = () => { this.onReady() }
       }
     }
@@ -329,12 +330,12 @@ class IFrameWorker implements ScripterWorkerI {
       //
       // This, because w/self/window can not be derived from and must be mutated inside worker,
       // which causes the worker to replace the window.postMessage function, which is used to
-      // deliver messages to the worker. The __scripterPostMessage property contains a ref to the
+      // deliver messages to the worker. The __figpadPostMessage property contains a ref to the
       // actual, verbatim window.postMessage function.
       //
       // Caution: Accessing this.frame.contentWindow when iframeUrl is not empty causes
       // an exception.
-      const postMessage = this.frame.contentWindow["__scripterPostMessage"]
+      const postMessage = this.frame.contentWindow["__figpadPostMessage"]
       if (postMessage) {
         this.postMessage = (message, transfer) => {
           postMessage.call(this.frame.contentWindow, message, "*", transfer)
@@ -354,9 +355,9 @@ class IFrameWorker implements ScripterWorkerI {
   }
 
   _onmessage(ev :MessageEvent) {
-    if (ev.data === "__scripter_iframe_ready") {
+    if (ev.data === "__figpad_iframe_ready") {
       this.ready || this.onReady()
-    } else if (ev.data === "__scripter_iframe_close") {
+    } else if (ev.data === "__figpad_iframe_close") {
       // closed itself
       this.terminate()
     } else {
@@ -392,7 +393,7 @@ class IFrameWorker implements ScripterWorkerI {
 }
 
 
-function worker_createWebWorker(scriptBody :string) :ScripterWorkerI {
+function worker_createWebWorker(scriptBody :string) :FigpadWorkerI {
   let blobParts = [
     workerTemplate.worker[0], // generated from worker-template.js
     scriptBody,
@@ -401,22 +402,22 @@ function worker_createWebWorker(scriptBody :string) :ScripterWorkerI {
   let workerURL = URL.createObjectURL(new Blob(blobParts, {type: "application/javascript"} ))
   let worker = new Worker(workerURL)
   URL.revokeObjectURL(workerURL)
-  return worker as any as ScripterWorkerI
+  return worker as any as FigpadWorkerI
 }
 
 
 let workerIdGen = 0
-let workers = new Map<string,ScripterWorkerI>()
+let workers = new Map<string,FigpadWorkerI>()
 
 function rpc_worker_create(req :WorkerCreateRequestMsg) {
   rpc_reply<WorkerCreateResponseMsg>(req.id, "worker-create-res", async () => {
     dlog("rpc_worker_create", req)
 
     let workerId = req.workerId
-    let worker :ScripterWorkerI
+    let worker :FigpadWorkerI
     if (req.iframe) {
       // launch an iframe-based worker
-      let config :ScripterWorkerIframeConfig = typeof req.iframe == "object" ? req.iframe : {}
+      let config :FigpadWorkerIframeConfig = typeof req.iframe == "object" ? req.iframe : {}
       worker = new IFrameWorker(workerId, req.js, config)
     } else {
       worker = worker_createWebWorker(req.js)
@@ -431,9 +432,9 @@ function rpc_worker_create(req :WorkerCreateRequestMsg) {
       let d = ev.data.data
       if (d && typeof d == "object") {
         const type = d.type
-        if (type == "__scripter_close") {
+        if (type == "__figpad_close") {
           return worker_onclose(workerId)
-        } else if (type == "__scripter_toplevel_err") {
+        } else if (type == "__figpad_toplevel_err") {
           let stack = d.stack
           if (stack != "") {
             stack = stack.replace(/\sblob:.+:(\d+):(\d+)/g, " <worker-script>:$1:$2")
@@ -499,7 +500,7 @@ function worker_onclose(workerId :string) {
 }
 
 
-function worker_get(msg :{ workerId :string }) : ScripterWorkerI | null {
+function worker_get(msg :{ workerId :string }) : FigpadWorkerI | null {
   let worker = workers.get(msg.workerId)
   if (!worker) {
     // this happens naturally for close & terminate messages, as close & terminate
@@ -606,7 +607,7 @@ function rpc_ui_input(msg :UIInputRequestMsg) {
       })
     }
     // else if (viewZone.nextResolver) {
-    //   console.warn("[scripter/rpc_ui_input] enqueueResolver while this.nextResolver != null", {
+    //   console.warn("[figpad/rpc_ui_input] enqueueResolver while this.nextResolver != null", {
     //     instanceId: msg.instanceId,
     //   })
     // }

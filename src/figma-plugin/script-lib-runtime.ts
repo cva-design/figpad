@@ -70,7 +70,7 @@ function sourcePosFromStackFrame(frame :string) :M.SourcePos {
 
   // Example of Developer VM stack frame:
   //
-  //   at __scripter_script_main (eval at <anonymous> \
+  //   at __figpad_script_main (eval at <anonymous> \
   //   (eval at createScopedEvaluatorFactory \
   //   (blob:https://www.figma.com/aed74adc-447b-4242-a05a-b7f8ae094443:1:6906)), \
   //   <anonymous>:5:24)
@@ -96,7 +96,7 @@ function sourcePosFromStackFrame(frame :string) :M.SourcePos {
 
 function indexOfScriptMainStackFrame(frames :string[]) :number {
   for (let i = 1; i < frames.length; i++) {
-    if (frames[i].indexOf("__scripter_script_main ") != -1) {
+    if (frames[i].indexOf("__figpad_script_main ") != -1) {
       return i
       break
     }

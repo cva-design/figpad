@@ -2,8 +2,8 @@
 (function (_postMessage, _close, globalObj, _amd) {
   // special props on data for implementing script-worker requests
   // IMPORTANT: Keep in sync with worker-template.js
-  const requestIdProp = "__scripterRequestId"
-  const requestErrProp = "__scripterRequestError"
+  const requestIdProp = "__figpadRequestId"
+  const requestErrProp = "__figpadRequestError"
 
   let recvp, recvres, recvrej
   let msgq = []
@@ -121,7 +121,7 @@
     if (requestq.length > 0 && !onrequest) {
       __onerror("request() was called but no onrequest handler was registered")
     }
-    postMessage({type:"__scripter_close"})
+    postMessage({type:"__figpad_close"})
     _close()
   }
 
@@ -130,7 +130,7 @@
   }
 
   function timer(timeout) {
-    // TODO: implement full Scripter timer API
+    // TODO: implement full Figpad timer API
     let timer = null
     const p = new Promise((resolve, reject) => {
       timer = setTimeout(() => {
@@ -149,7 +149,7 @@
 
   function __onerror(err) {
     postMessage({
-      type: "__scripter_toplevel_err",
+      type: "__figpad_toplevel_err",
       message: err ? String(err) : "unknown error",
       stack: (err && err.stack) || "",
     })
@@ -166,7 +166,7 @@
 
       w.importCommonJS = url => {
         globalObj.exports = {}
-        globalObj.module = {id:"scripter", exports:globalObj.exports}
+        globalObj.module = {id:"figpad", exports:globalObj.exports}
         return w.importScripts(url).then(() => {
           let exports = globalObj.module.exports
           delete globalObj.module
@@ -189,12 +189,12 @@
 })(
   // _postMessage
   (
-    typeof __scripterPostMessage != "undefined" ? __scripterPostMessage :
+    typeof __figpadPostMessage != "undefined" ? __figpadPostMessage :
     self.postMessage.bind(self)
   ),
   // _close
   (
-    typeof __scripterClose != "undefined" ? __scripterClose :
+    typeof __figpadClose != "undefined" ? __figpadClose :
     self.close.bind(self)
   ),
   // globalObj
@@ -552,7 +552,7 @@
 
   const _importScripts = (
     // iframe
-    typeof __scripterImportScripts != "undefined" ? __scripterImportScripts :
+    typeof __figpadImportScripts != "undefined" ? __figpadImportScripts :
     // web worker
     (f =>
       (...urls) => Promise.resolve(f(...urls))

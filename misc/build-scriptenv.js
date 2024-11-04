@@ -2,7 +2,7 @@ const fs = require("fs")
 const Path = require("path")
 
 const prog    = Path.relative(process.cwd(), __filename)
-const infile  = "src/common/scripter-env.d.ts"
+const infile  = "src/common/figpad-env.d.ts"
 const outfile = "src/figma-plugin/scriptenv.d.ts"
 
 process.chdir(__dirname + "/..")

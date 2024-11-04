@@ -1,5 +1,5 @@
 export interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Iterable<T> {
-  // duplicated in scripter-env.d.ts
+  // duplicated in figpad-env.d.ts
 
   readonly length :LenT  // Infinity if unbounded
   map<R>(f :(value :T, index :number)=>R) :R[]
@@ -10,7 +10,7 @@ export interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extend
 
 
 export class LazyNumberSequence implements LazySeq<number,number,number> {
-  readonly __scripter_lazy_seq__ = "n"
+  readonly __figpad_lazy_seq__ = "n"
   readonly length :number
   readonly start  :number
   readonly end    :number

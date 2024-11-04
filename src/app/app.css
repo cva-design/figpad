@@ -715,7 +715,7 @@ body.showMessage #editor { bottom: var(--messageHeight); }
       box-shadow: 1px 0 0 0 #ddd inset !important;
     }
 
-    &.scripter-light {
+    &.figpad-light {
       & .margin {
         & .line-numbers { color: #ccc; }
         & .current-line ~ .line-numbers { color: #888; }

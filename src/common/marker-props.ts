@@ -1,6 +1,6 @@
 // special properties used to communicate object type over IPC
 export default {
-  __scripter_image_marker__: 1,
-  __scripter_lazy_seq__: 1,
-  __scripter_error__: 1,
+  __figpad_image_marker__: 1,
+  __figpad_lazy_seq__: 1,
+  __figpad_error__: 1,
 }

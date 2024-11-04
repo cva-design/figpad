@@ -29,7 +29,7 @@ export function createViewportAPI(env :ScriptEnv, _ign_scriptId :string) :SViewp
   function init() {
     if (!initialized) {
       initialized = true
-      env.scripter.addEndCallback(onScriptEnd)
+      env.figpad.addEndCallback(onScriptEnd)
     }
   }
 
@@ -73,7 +73,7 @@ export function createViewportAPI(env :ScriptEnv, _ign_scriptId :string) :SViewp
   })
 
   // ---------------------------
-  // Scripter extensions follows
+  // Figpad extensions follows
 
   viewport.set = (center :Vector|null, zoom? :number|null) :void => {
     center && (figma.viewport.center = center)

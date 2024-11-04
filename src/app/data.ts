@@ -4,7 +4,7 @@ import * as xdb from "./xdb"
 const print = console.log.bind(console)
 
 const DB_VERSION = 2
-export const db = new xdb.Database("scripter", DB_VERSION)
+export const db = new xdb.Database("figpad", DB_VERSION)
 
 // let dbPromiseResolve :(v:xdb.Database)=>void
 // let dbPromiseReject :(e:Error)=>void
@@ -16,7 +16,7 @@ export const db = new xdb.Database("scripter", DB_VERSION)
 
 export async function initData() {
   // print("deleting database")
-  // await xdb.delete("scripter", () => {
+  // await xdb.delete("figpad", () => {
   //   print("delete is blocked (db opened in other tab). Waiting for db to close...")
   // })
 

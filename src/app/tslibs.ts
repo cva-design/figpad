@@ -7,11 +7,11 @@ export const webworker = {
   filename: "lib.webworker.d.ts",
   version: "nkpjZop6oiU0iz4a83cmigz6edo"
 };
-export const scripter = {
-  filename: "scripter-env.d.ts",
-  version: "OTv3981fJru4/uRsfKhUXweO9a0"
+export const figpad = {
+  filename: "figpad-env.d.ts",
+  version: "HDW99XveQ/zUeXrkVIp2nYXM41w"
 };
 export const figma = {
   filename: "figma.d.ts",
-  version: "Eq96lrWDKyVEgmteRSgwLazRrow"
+  version: "3i2UyGhkhq7hH1R+aBcG+uqi490"
 };

@@ -20,7 +20,7 @@ import { SavedScriptIndex } from "./saved-scripts"
 import * as consts from "./constants"
 import { createScriptNode, updateScriptNode } from "./scriptnode"
 
-// scriptLib is a global declared in scripter-env.js
+// scriptLib is a global declared in figpad-env.js
 declare var scriptLib :{[k:string]:any}
 scriptLib = scriptLibImpl
 
@@ -143,10 +143,10 @@ function loadScriptFromSelection() {
   // However, the resulting behavior is acceptable:
   // a) When the user clicks the "Open script" relaunch button, the selected script is opened.
   //    This is good.
-  // b) When the user selects a script node and just runs Scripter normally, the selected script
+  // b) When the user selects a script node and just runs Figpad normally, the selected script
   //    is opened. This is not ideal, but it's acceptable. When/if Figma changes the API so that
   //    relaunch data doesn't "get stcuck" this behavior will change to the better.
-  // c) When the user selects something that is not a script node and runs Scripter, whatever the
+  // c) When the user selects something that is not a script node and runs Figpad, whatever the
   //    last script they were working on is opened. This is good.
   //
   let limit = 20
@@ -228,7 +228,7 @@ async function saveScript(msg :SaveScriptMsg) {
 function fmtErrorResponse(err :Error, response :EvalResponseMsg) {
   response.error = err.message || String(err)
   response.srcLineOffset = evalScript.lineOffset
-  let stack :string = (err as any).scripterStack || err.stack
+  let stack :string = (err as any).figpadStack || err.stack
   if (typeof stack == "string") {
     let frames = stack.split(/[\r\n]+/)
     let framePos :{line:number,column:number}[] = []
@@ -264,7 +264,7 @@ class EvalTransaction {
   }
 
   setError(err :Error) {
-    console.error("[script]", (err as any).scripterStack || err.stack || String(err))
+    console.error("[script]", (err as any).figpadStack || err.stack || String(err))
     fmtErrorResponse(err, this.response)
   }
 
@@ -342,7 +342,7 @@ async function evalCode(req :EvalRequestMsg) {
   let tx = new EvalTransaction(req.id, req.js)
 
   if (activeRequests.has(tx.id)) {
-    console.error(`[scripter plugin] duplicate eval request ${tx.id}`)
+    console.error(`[figpad plugin] duplicate eval request ${tx.id}`)
     tx.finalize()
     return
   }
