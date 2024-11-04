@@ -18,7 +18,7 @@ fi
 
 GITREV=$(git rev-parse HEAD)
 
-# patch version of iframe src="https://scripter.rsms.me/?v=1"
+# patch version of iframe src="https://figpad.cva.design/?v=1"
 node <<_JS_
 let fs = require("fs")
 let s = fs.readFileSync("build/figma-plugin/ui.html", "utf8")

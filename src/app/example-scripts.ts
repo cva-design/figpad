@@ -259,20 +259,20 @@ s("basics/images", "Basics/Showing images", `
 // Passing an Img to print vizualizes the image.
 
 // Img can take a URL which is then loaded by the web browser
-print(Img("https://scripter.rsms.me/icon.png"))
+print(Img("https://figpad.cva.design/icon.png"))
 
 // We can specify the size if we want
-print(Img("https://scripter.rsms.me/icon.png", {width:128, height:16}))
+print(Img("https://figpad.cva.design/icon.png", {width:128, height:16}))
 
 // Img.load() allows us to load the image data
-let icon = await Img("https://scripter.rsms.me/icon.png").load()
+let icon = await Img("https://figpad.cva.design/icon.png").load()
 print(icon.data)
 // A loaded image may also have information that was read from
 // the image data itself, like mime type and bitmap dimensions:
 print(icon, icon.type, icon.meta)
 
 // fetchImg is a shorthand function for loading an Img
-let loadedIcon = await fetchImg("https://scripter.rsms.me/icon.png")
+let loadedIcon = await fetchImg("https://figpad.cva.design/icon.png")
 print(loadedIcon, loadedIcon.meta)
 
 // Img also accepts image data as its input,
@@ -290,7 +290,7 @@ let gifData = Bytes(\`
 print(Img(gifData, 32))
 
 // Img also supports JPEG in addition to PNG and GIF
-let im1 = Img("https://scripter.rsms.me/sample/colors.jpg")
+let im1 = Img("https://figpad.cva.design/sample/colors.jpg")
 await im1.load()
 print(im1, [im1])
 `),
@@ -530,8 +530,8 @@ print(await r.json())
 // Scripter provides a few shorthand functions for common tasks:
 print(await fetchJson("https://jsonplaceholder.typicode.com/users/1"))
 print(await fetchText("https://jsonplaceholder.typicode.com/users/1"))
-print(await fetchImg("https://scripter.rsms.me/icon.png"))
-print(await fetchData("https://scripter.rsms.me/icon.png"))
+print(await fetchImg("https://figpad.cva.design/icon.png"))
+print(await fetchData("https://figpad.cva.design/icon.png"))
 `),
 
 
@@ -760,7 +760,7 @@ let w = createWorker({iframe:true}, async w => {
 })
 
 // load sample data
-const data = await fetchJson("https://scripter.rsms.me/sample/old-faithful.json")
+const data = await fetchJson("https://figpad.cva.design/sample/old-faithful.json")
 
 // Send data to the worker for processing.
 // The second argument causes data to be transferred
@@ -824,7 +824,7 @@ A second window is opened as well, loading a Three.js WebGL via an external URL.
 */
 const w1 = createWindow({title:"d3",width:800}, async w => {
   // load data
-  const datap = fetch("https://scripter.rsms.me/sample/old-faithful.json").then(r => r.json())
+  const datap = fetch("https://figpad.cva.design/sample/old-faithful.json").then(r => r.json())
 
   // load d3 library
   const d3 = await w.import("d3@5")

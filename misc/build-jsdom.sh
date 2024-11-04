@@ -37,7 +37,7 @@ input.on("readable", () => {
   } else {
     let version = hash.digest("base64").replace(/=+/g, "")
     console.log("export default " + JSON.stringify({
-      url: "https://scripter.rsms.me/jsdom.js?v=" + version
+      url: "https://figpad.cva.design/jsdom.js?v=" + version
     }, null, 2))
   }
 });

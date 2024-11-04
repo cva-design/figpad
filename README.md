@@ -40,5 +40,5 @@ If you are using the Figma desktop app and you didn't do any of the above, it ma
 > Help! I can't access Scripter in Figma
 
 If you are unable to access Figma to launch Scripter, you can visit
-[`https://scripter.rsms.me/`](https://scripter.rsms.me/)
-where you can browse and download your scripts. Remember to visit this website using the web browser that you used in the past for Scripter. If that was the Figma desktop app and you are unable to sign into Figma, open the desktop app's developer tools (Help → Toggle developer tools). In the "Console" enter `document.body.innerHTML="<iframe style='width:100vw;height:100vh' src='https://scripter.rsms.me/'></iframe>"` and press RETURN to load that website in Figma.
+[`https://figpad.cva.design/`](https://figpad.cva.design/)
+where you can browse and download your scripts. Remember to visit this website using the web browser that you used in the past for Scripter. If that was the Figma desktop app and you are unable to sign into Figma, open the desktop app's developer tools (Help → Toggle developer tools). In the "Console" enter `document.body.innerHTML="<iframe style='width:100vw;height:100vh' src='https://figpad.cva.design/'></iframe>"` and press RETURN to load that website in Figma.
