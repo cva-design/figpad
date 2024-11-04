@@ -1,5 +1,7 @@
-/// <reference path="./plugin-api.d.ts" />
-declare global {
+/**
+ * @figma/plugin-typings@1.100.2
+ */
+
 /* plugin-typings are auto-generated. Do not update them directly. See plugin-docs/ for instructions. */
 declare type ArgFreeEventType =
   | 'selectionchange'
@@ -2600,7 +2602,7 @@ interface FindAllCriteria<T extends NodeType[]> {
     keys?: string[]
   }
 }
-}
+
 declare global {
   // Global variable with Figma's plugin API.
   const figma: PluginAPI
